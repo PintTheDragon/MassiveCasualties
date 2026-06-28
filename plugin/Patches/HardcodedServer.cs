@@ -13,7 +13,7 @@ namespace MassiveCasualties.Patches;
 [HarmonyPatch(typeof(Net))]
 internal static class HardcodedServer
 {
-    public static knetid curHostID = 0;
+    internal static knetid CurHostID = 0;
 
     private static readonly MethodInfo InvokeServerMessage =
         SymbolExtensions.GetMethodInfo(() => Net.InvokeServerMessage(0, null));
@@ -31,7 +31,7 @@ internal static class HardcodedServer
             .ThrowIfInvalid("Couldn't find InvokeServerMessage")
             .MatchBack(false, new CodeMatch(OpCodes.Ldc_I4_0))
             // HardcodedServer.curHostID
-            .SetAndAdvance(OpCodes.Ldsfld, AccessTools.Field(typeof(HardcodedServer), nameof(curHostID)))
+            .SetAndAdvance(OpCodes.Ldsfld, AccessTools.Field(typeof(HardcodedServer), nameof(CurHostID)))
             // This is an implicit conversion from ushort to knetid, which is no longer needed.
             .RemoveInstruction()
             .Instructions();
