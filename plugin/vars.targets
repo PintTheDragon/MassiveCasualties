@@ -1,0 +1,12 @@
+<Project>
+  <PropertyGroup>
+    <!--Set this to your project's name-->
+    <ProjectName>MassiveCasualties</ProjectName>
+    <!--Set this to the game's main folder-->
+    <BaseGamePath Condition="Exists('C:/Program Files (x86)/Steam/steamapps/common/Casualties Unknown Demo')">C:/Program Files (x86)/Steam/steamapps/common/Casualties Unknown Demo</BaseGamePath>
+    <BaseGamePath Condition="Exists('$(HOME)/.steam/steam/steamapps/common/Casualties Unknown Demo/')">$(HOME)/.steam/steam/steamapps/common/Casualties Unknown Demo</BaseGamePath>
+    <BepInExDir>$(BaseGamePath)/BepInEx</BepInExDir>
+    <GameAssembliesDir>$(BaseGamePath)/CasualtiesUnknown_Data/Managed</GameAssembliesDir>
+    <KrokMPDir>$(BepInExDir)/plugins/KrokMP</KrokMPDir>
+  </PropertyGroup>
+</Project>
