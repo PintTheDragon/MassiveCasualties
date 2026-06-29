@@ -8,5 +8,6 @@
     <BepInExDir>$(BaseGamePath)/BepInEx</BepInExDir>
     <GameAssembliesDir>$(BaseGamePath)/CasualtiesUnknown_Data/Managed</GameAssembliesDir>
     <KrokMPDir>$(BepInExDir)/plugins/KrokMP</KrokMPDir>
+    <CoreLibDir>$(BepInExDir)/plugins/CUCoreLib</CoreLibDir>
   </PropertyGroup>
 </Project>

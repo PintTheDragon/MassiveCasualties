@@ -3,6 +3,7 @@ using BepInEx;
 using BepInEx.Logging;
 using HarmonyLib;
 using MassiveCasualties.Behaviors;
+using MassiveCasualties.Commands;
 
 namespace MassiveCasualties;
 
@@ -32,6 +33,8 @@ public class Plugin : BaseUnityPlugin
         }
 
         gameObject.AddComponent<HostWatcher>();
+
+        ChangeHost.Register();
 
         Logger.LogInfo($"Plugin {ModName} is loaded!");
     }
