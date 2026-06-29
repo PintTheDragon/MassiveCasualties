@@ -1,3 +1,4 @@
+using System.Collections;
 using KrokoshaCasualtiesMP;
 using MassiveCasualties.Patches;
 using Steamworks;
@@ -63,7 +64,10 @@ internal class HostWatcher : MonoBehaviour
 
         FixHostSyncObjects();
 
-        CloseAllSockets(transportSteamworks);
+        // Need to be very careful about ordering here, going client -> host, we may
+        // have already received some P2P connections, so don't close those.
+        CloseOwnSockets(transportSteamworks);
+
         transportSteamworks.CreateServerSocket();
 
         // TODO: Host connection works, but something
@@ -87,8 +91,10 @@ internal class HostWatcher : MonoBehaviour
 
         FixClientSyncObjects();
 
-        CloseAllSockets(transportSteamworks);
-        transportSteamworks.CreateClientSocket();
+        CloseOwnSockets(transportSteamworks);
+        CloseConnectedSockets(transportSteamworks);
+
+        StartCoroutine(ConnectAfterDelay(transportSteamworks));
 
         // TODO: Need to go through the handshake process
         //       plus fast-track it on the host side for existing
@@ -97,7 +103,18 @@ internal class HostWatcher : MonoBehaviour
         // TODO: New client can't disconnect (host should also be able to).
     }
 
-    private void CloseAllSockets(TransportSteamworks transportSteamworks)
+    private IEnumerator ConnectAfterDelay(TransportSteamworks transportSteamworks)
+    {
+        yield return new WaitForSeconds(0.25f);
+
+        // TODO: Race condition here if the host hasn't changed to host mode yet,
+        //       it'll reject the connection. Maybe add rejection and keep retrying, plus
+        //       a final ACK + timeout to fail.
+
+        transportSteamworks.CreateClientSocket();
+    }
+
+    private void CloseOwnSockets(TransportSteamworks transportSteamworks)
     {
         if (transportSteamworks.listenSocket != HSteamListenSocket.Invalid)
         {
@@ -110,6 +127,10 @@ internal class HostWatcher : MonoBehaviour
         }
 
         transportSteamworks.CloseConnectionOnServerUser();
+    }
+
+    private void CloseConnectedSockets(TransportSteamworks transportSteamworks)
+    {
         transportSteamworks.CloseP2PSessions();
     }
 

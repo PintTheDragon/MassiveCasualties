@@ -13,13 +13,10 @@ namespace MassiveCasualties.Patches;
 ///     Fixes places where the server's client ID is hardcoded to 0,
 ///     as host swapping causes it to change.
 /// </summary>
-[HarmonyPatch(typeof(Net))]
+[HarmonyPatch]
 internal static class HardcodedServer
 {
     internal static knetid CurHostID = 0;
-
-    private static readonly MethodInfo InvokeServerMessage =
-        SymbolExtensions.GetMethodInfo(() => Net.InvokeServerMessage(0, null));
 
     private static readonly MethodInfo ImplicitIDFromUshortCast =
         typeof(knetid).GetMethod("op_Implicit", [typeof(ushort)]);
@@ -60,14 +57,14 @@ internal static class HardcodedServer
         return matcher.Instructions();
     }
 
-    [HarmonyPatch(nameof(Net.Client_Send))]
+    [HarmonyPatch(typeof(Net), nameof(Net.Client_Send))]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> Client_Send(IEnumerable<CodeInstruction> instructions)
     {
         return GeneralRewrite(instructions, 1);
     }
 
-    [HarmonyPatch(nameof(Net.Server_SendToClients), [
+    [HarmonyPatch(typeof(Net), nameof(Net.Server_SendToClients), [
         typeof(DeliveryMethod), typeof(NetDataWriter),
         typeof(IEnumerable<knetid>)
     ], [ArgumentType.Ref, ArgumentType.Ref, ArgumentType.Ref])]
@@ -77,12 +74,11 @@ internal static class HardcodedServer
         return GeneralRewrite(instructions, 2);
     }
 
-    [HarmonyPatch(nameof(Net.Server_SendTo), [
+    [HarmonyPatch(typeof(Net), nameof(Net.Server_SendTo), [
         typeof(DeliveryMethod), typeof(NetDataWriter),
         typeof(knetid)
     ], [ArgumentType.Ref, ArgumentType.Ref, ArgumentType.Ref])]
     [HarmonyTranspiler]
-    [HarmonyDebug]
     private static IEnumerable<CodeInstruction> Server_SendTo(IEnumerable<CodeInstruction> instructions)
     {
         // There's an if statement here that uses ushorts and not knetid for
@@ -104,8 +100,35 @@ internal static class HardcodedServer
             .Instructions();
     }
 
-    // TODO: This patch doesn't work because Net.InvokeClientMessage
-    //       also needs to be patched.
+    [HarmonyPatch(typeof(Net), nameof(Net.InvokeClientMessage))]
+    [HarmonyTranspiler]
+    private static IEnumerable<CodeInstruction> InvokeClientMessage(IEnumerable<CodeInstruction> instructions)
+    {
+        //      IL_0036: ldarg.0      // callerclientId
+        //      IL_0037: call         unsigned int16 KrokoshaCasualtiesMP.knetid::op_Implicit(valuetype KrokoshaCasualtiesMP.knetid)
+        //      IL_003c: brfalse.s    IL_0040
+
+        // GeneralRewrite is still good to have to detect future changes.
+        return new CodeMatcher(GeneralRewrite(instructions, 0))
+            .MatchForward(false, new CodeMatch(OpCodes.Call, UshortFromImplicitIDCast))
+            .ThrowIfInvalid("Could not find ushort -> knetid in InvokeClientMessage")
+            .Advance(1)
+            .InsertAndAdvance(
+                new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(HardcodedServer), nameof(CurHostID))),
+                new CodeInstruction(OpCodes.Call, UshortFromImplicitIDCast),
+                new CodeInstruction(OpCodes.Ceq))
+            .SetOpcodeAndAdvance(OpCodes.Brtrue_S)
+            .Instructions();
+    }
+
+    [HarmonyPatch(typeof(TransportSteamworks), nameof(TransportSteamworks._K_OnReceiveNetworkingMessage))]
+    [HarmonyTranspiler]
+    private static IEnumerable<CodeInstruction> _K_OnReceiveNetworkingMessage(IEnumerable<CodeInstruction> instructions)
+    {
+        return GeneralRewrite(instructions, 1);
+    }
+
+    // TODO: Do a search through the whole codebase for "(ushort) 0" and "(knetid)".
 
     // TODO: Might be worth patching Net.CreatePlayer and NetPlayer.ApplyNameAndColor
 }
