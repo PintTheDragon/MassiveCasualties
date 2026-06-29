@@ -187,6 +187,10 @@ internal class HostWatcher : MonoBehaviour
                 ply.is_host = true;
                 HardcodedServer.CurHostID = ply.clientId;
 
+                // Local is only true for the host's local instance of itself,
+                // as far as I can tell.
+                if (ply.clientId == NetPlayer.LOCAL_PLAYER.clientId) ply.is_local = true;
+
                 // TODO: Figure out a better place to spawn players, and refactor this.
                 Body_PlaceBody_MultiplayerPatch.has_spawn_location = true;
                 Body_PlaceBody_MultiplayerPatch.spawnlocation = ply.body.transform.position;
@@ -199,8 +203,6 @@ internal class HostWatcher : MonoBehaviour
                 ply.server_plrstate.is_loaded_in = true;
             }
         }
-
-        NetPlayer.LOCAL_PLAYER.is_local = true;
 
         if (!foundHost) Plugin.Logger.LogError("Could not find new host's player object!");
     }

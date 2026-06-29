@@ -94,6 +94,7 @@ internal static class HardcodedServer
 
         return new CodeMatcher(GeneralRewrite(instructions, 1))
             .MatchForward(false, new CodeMatch(OpCodes.Call, UshortFromImplicitIDCast))
+            .ThrowIfInvalid("Could not find ushort -> knetid in Server_SendTo")
             .Advance(1)
             .InsertAndAdvance(
                 new CodeInstruction(OpCodes.Ldsfld, AccessTools.Field(typeof(HardcodedServer), nameof(CurHostID))),
@@ -102,4 +103,9 @@ internal static class HardcodedServer
             .SetOpcodeAndAdvance(OpCodes.Brfalse_S)
             .Instructions();
     }
+
+    // TODO: This patch doesn't work because Net.InvokeClientMessage
+    //       also needs to be patched.
+
+    // TODO: Might be worth patching Net.CreatePlayer and NetPlayer.ApplyNameAndColor
 }
