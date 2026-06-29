@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using MassiveCasualties.Behaviors;
 using MassiveCasualties.Commands;
+using MassiveCasualties.Patches;
 
 namespace MassiveCasualties;
 
@@ -26,15 +27,19 @@ public class Plugin : BaseUnityPlugin
         try
         {
             _harmony.PatchAll();
+
+            gameObject.AddComponent<HostWatcher>();
+            gameObject.AddComponent<LobbyManager>();
+
+            ChangeHost.Register();
+            JoinRandom.Register();
+
+            PatchSteamLobby.Init();
         }
         catch (Exception e)
         {
             Logger.LogError(e.ToString());
         }
-
-        gameObject.AddComponent<HostWatcher>();
-
-        ChangeHost.Register();
 
         Logger.LogInfo($"Plugin {ModName} is loaded!");
     }

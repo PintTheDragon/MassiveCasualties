@@ -28,11 +28,17 @@ internal class HostWatcher : MonoBehaviour
     {
         if (Net.TRANSPORT is not TransportSteamworks transportSteamworks) return;
 
-        var curID = KSteam.CURRENT_LOBBY.ownerID.m_SteamID;
+        var curID = GetOwnerID().m_SteamID;
         var oldID = _cachedHostID;
 
         if (curID == oldID) return;
         _cachedHostID = curID;
+
+        // Always needed (not just on host swap), and used for
+        // communicating to/from the host in the hardcoded server patches.
+        if (curID != CSteamID.Nil.m_SteamID &&
+            transportSteamworks.SteamIDToClientIDDict.TryGetByFirst(curID, out var hostClientID))
+            HardcodedServer.CurHostID = hostClientID;
 
         // curID == 0 means we left the lobby, oldID == 0
         // means we just joined one.
@@ -49,6 +55,23 @@ internal class HostWatcher : MonoBehaviour
     private void OnDestroy()
     {
         if (Singleton == this) Singleton = null;
+    }
+
+    /// <summary>
+    ///     Informs the HostWatcher that we've disconnected from the server,
+    ///     and prevents it from messing up the state if it doesn't notice it
+    ///     before we connect to a different server.
+    /// </summary>
+    internal static void CallOnDisconnect()
+    {
+        Singleton._cachedHostID = GetOwnerID().m_SteamID;
+    }
+
+    private static CSteamID GetOwnerID()
+    {
+        // Sometimes, lobby_steamID is unset while ownerID is unchanged.
+        if (KSteam.CURRENT_LOBBY.lobby_steamID == CSteamID.Nil) return CSteamID.Nil;
+        return KSteam.CURRENT_LOBBY.ownerID;
     }
 
     /// <summary>
@@ -70,11 +93,12 @@ internal class HostWatcher : MonoBehaviour
 
         transportSteamworks.CreateServerSocket();
 
-        // TODO: Host connection works, but something
-        //       (probably ID 0 check) is causing it to
-        //       not use data properly (client movement doesn't
-        //       work, only jumping, and host can't see messages, but
-        //       client can). Movement works on reconnect, but not chat.
+        // TODO: After changehost 1, client no longer sees
+        //       host movement. Changing back fixes the problem.
+        //       Maybe there's something that only gets enabled for
+        //       clients which makes body sync work?
+        //       Also, joinrandom doesn't load in players, which I think
+        //       is the same problem.
     }
 
     /// <summary>
@@ -158,7 +182,8 @@ internal class HostWatcher : MonoBehaviour
                 new CoolSyncSubSystemForObjects.Server_Object
                 {
                     netId = clientObj.Value.netId,
-                    real_obj = clientObj.Value.real_obj
+                    real_obj = clientObj.Value.real_obj,
+                    cur_packet = clientObj.Value.cur_packet
                 };
         }
 
@@ -181,7 +206,8 @@ internal class HostWatcher : MonoBehaviour
                 new CoolSyncSubSystemForObjects.Client_Object
                 {
                     netId = serverObj.Value.netId,
-                    real_obj = serverObj.Value.real_obj
+                    real_obj = serverObj.Value.real_obj,
+                    cur_packet = serverObj.Value.cur_packet
                 };
         }
 
@@ -202,11 +228,10 @@ internal class HostWatcher : MonoBehaviour
             ply.is_local = false;
             ply.is_host = false;
 
-            if (ply.steam_id == KSteam.CURRENT_LOBBY.ownerID.m_SteamID)
+            if (ply.steam_id == GetOwnerID().m_SteamID)
             {
                 foundHost = true;
                 ply.is_host = true;
-                HardcodedServer.CurHostID = ply.clientId;
 
                 // Local is only true for the host's local instance of itself,
                 // as far as I can tell.

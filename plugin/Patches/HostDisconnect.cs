@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Reflection.Emit;
 using HarmonyLib;
 using KrokoshaCasualtiesMP;
+using MassiveCasualties.Behaviors;
 
 namespace MassiveCasualties.Patches;
 
@@ -53,7 +54,7 @@ internal static class DisconnectPatchTransport
 internal static class DisconnectPatchChat
 {
     private static readonly MethodInfo NewDisconnectMethod =
-        SymbolExtensions.GetMethodInfo(() => DisconnectReplacement(null));
+        SymbolExtensions.GetMethodInfo(() => DisconnectReplacement());
 
     [HarmonyPatch(nameof(KSteam.OnLobbyChatUpdate))]
     [HarmonyTranspiler]
@@ -63,8 +64,6 @@ internal static class DisconnectPatchChat
             .MatchForward(false, new CodeMatch(OpCodes.Ldstr, "LOBBY OWNER LEFT, LEAVING"))
             .ThrowIfInvalid("Failed to find chat shutdown!")
             // DisconnectReplacement();
-            // DisconnectReplacement(this);
-            .InsertAndAdvance(new CodeInstruction(OpCodes.Ldarg_0))
             .InsertAndAdvance(new CodeInstruction(OpCodes.Call, NewDisconnectMethod))
             // return;
             .InsertAndAdvance(new CodeInstruction(OpCodes.Ret))
@@ -75,14 +74,35 @@ internal static class DisconnectPatchChat
     /// <summary>
     ///     This happens when the host actually leaves the lobby.
     /// </summary>
-    private static void DisconnectReplacement(TransportSteamworks transportSteamworks)
+    private static void DisconnectReplacement()
     {
+        if (!Net.TryGetSteamTransport(out var transportSteamworks))
+        {
+            Plugin.Logger.LogError("DisconnectReplacement couldn't find TransportSteamworks (shouldn't be possible)!");
+            return;
+        }
+
         ConsoleScript.instance.LogToConsole("Triggered DisconnectPatchChat");
 
         // These need to be cleared, otherwise the host won't be able
         // to reconnect.
         // It can't be cleared in OnConnectionStatusChanged, since that would
         // interfere with host swaps.
+        // TODO: Sometimes the client disconnects the host (maybe caused here, but I'm unsure).
         transportSteamworks.RemoveSteamUser(KSteam.CURRENT_LOBBY.ownerID.m_SteamID);
+    }
+}
+
+/// <summary>
+///     Informs the HostWatcher when we disconnect.
+/// </summary>
+[HarmonyPatch(typeof(Net))]
+internal static class DisconnectPatchShutdown
+{
+    [HarmonyPatch(nameof(Net.ShutdownReset))]
+    [HarmonyPostfix]
+    private static void Postfix()
+    {
+        HostWatcher.CallOnDisconnect();
     }
 }
