@@ -33,12 +33,22 @@ internal class LobbyManager : MonoBehaviour
         Singleton.StartCoroutine(UpdateLobbiesLoop());
     }
 
-    internal static void Connect(CSteamID lobbyID)
+    private static IEnumerator Connect(CSteamID lobbyID)
     {
-        if (!Net.TryGetSteamTransport(out _)) return;
-        if (lobbyID == KSteam.CURRENT_LOBBY.lobby_steamID || lobbyID == CSteamID.Nil) return;
+        if (!Net.TryGetSteamTransport(out _)) yield break;
+        if (lobbyID == KSteam.CURRENT_LOBBY.lobby_steamID || lobbyID == CSteamID.Nil) yield break;
 
-        KSteam.LeaveLobbyAndResetNet();
+        KrokoshaScavMultiplayer.ShutdownNetwork();
+
+        // There's severe desync if we don't enter the lobby first.
+        // I'm guessing it's because the client fails to perform the handshake,
+        // since it thinks it's already in game.
+        KrokoshaScavMultiplayer.showMultiplayerMenu = true;
+        PlayerCamera.main.ToMainMenu();
+
+        // TODO: Improve this.
+        yield return new WaitForSeconds(1.0f);
+
         TransportSteamworks.OnWantToJoinLobby(lobbyID.m_SteamID);
     }
 
@@ -48,7 +58,7 @@ internal class LobbyManager : MonoBehaviour
         {
             if (lobby.lobby_steamID == KSteam.CURRENT_LOBBY.lobby_steamID) continue;
 
-            Connect(lobby.lobby_steamID);
+            Singleton.StartCoroutine(Connect(lobby.lobby_steamID));
             break;
         }
     }
@@ -70,9 +80,9 @@ internal class LobbyManager : MonoBehaviour
             SteamMatchmaking.AddRequestLobbyListStringFilter(
                 "CASUALTIESUNKNOWN_KROKOSHA_MULTIPLAYER_COOP_MOD_VERSION",
                 KrokoshaScavMultiplayer.FULL_VERSION_TAG, ELobbyComparison.k_ELobbyComparisonEqual);
-            SteamMatchmaking.AddRequestLobbyListNumericalFilter(
+            /*SteamMatchmaking.AddRequestLobbyListNumericalFilter(
                 "CASUALTIESUNKNOWN_KROKOSHA_MULTIPLAYER_COOP_MOD_CURRENTLAYER", Net.cur_server_info.cur_layer,
-                ELobbyComparison.k_ELobbyComparisonEqual);
+                ELobbyComparison.k_ELobbyComparisonEqual);*/
             SteamMatchmaking.AddRequestLobbyListStringFilter(
                 "CASUALTIESUNKNOWN_KROKOSHA_MULTIPLAYER_COOP_MOD_HASPASSWORD", "0",
                 ELobbyComparison.k_ELobbyComparisonEqual);
