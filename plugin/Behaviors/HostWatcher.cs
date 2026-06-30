@@ -36,9 +36,13 @@ internal class HostWatcher : MonoBehaviour
 
         // Always needed (not just on host swap), and used for
         // communicating to/from the host in the hardcoded server patches.
-        if (curID != CSteamID.Nil.m_SteamID &&
-            transportSteamworks.SteamIDToClientIDDict.TryGetByFirst(curID, out var hostClientID))
+        if (curID == CSteamID.Nil.m_SteamID)
+            // This relies on the fact that new games start
+            // with host ID == 0.
+            HardcodedServer.CurHostID = 0;
+        else if (transportSteamworks.SteamIDToClientIDDict.TryGetByFirst(curID, out var hostClientID))
             HardcodedServer.CurHostID = hostClientID;
+
 
         // curID == 0 means we left the lobby, oldID == 0
         // means we just joined one.
@@ -65,6 +69,7 @@ internal class HostWatcher : MonoBehaviour
     internal static void CallOnDisconnect()
     {
         Singleton._cachedHostID = GetOwnerID().m_SteamID;
+        if (Singleton._cachedHostID == CSteamID.Nil.m_SteamID) HardcodedServer.CurHostID = 0;
     }
 
     private static CSteamID GetOwnerID()
@@ -174,7 +179,19 @@ internal class HostWatcher : MonoBehaviour
             BuildingEntity_Start_MultiplayerPatch.Postfix(building);
         }
 
-        var sync = NewCoolerObjectPacketWriteReadSystem.inst;
+        foreach (var item in FindObjectsOfType<Item>()) Item_Start_MultiplayerPatch.Postfix(item);
+
+        FixHostSyncObjects(NewCoolerObjectPacketWriteReadSystem.inst);
+        FixHostSyncObjects(CharSync.inst);
+        FixHostSyncObjects(PlrSync.inst);
+
+        SharedMain.CreatePlayerCharacters();
+
+        // TODO: There's probably a bunch of other similar patches that need to be called.
+    }
+
+    private void FixHostSyncObjects(CoolSyncSubSystemForObjects sync)
+    {
         foreach (var clientObj in sync.client_objects)
         {
             if (sync.server_objects.ContainsKey(clientObj.Key)) continue;
@@ -189,7 +206,9 @@ internal class HostWatcher : MonoBehaviour
 
         sync.client_objects.Clear();
 
-        // TODO: There's probably a bunch of other similar patches that need to be called.
+        foreach (var ply in ServerMain.AllPlayersExceptHost)
+            // Creates a new perplrstate if one doesn't exist.
+            sync.GetPerPlrState(ply.clientId);
     }
 
     /// <summary>
@@ -198,7 +217,13 @@ internal class HostWatcher : MonoBehaviour
     /// </summary>
     private void FixClientSyncObjects()
     {
-        var sync = NewCoolerObjectPacketWriteReadSystem.inst;
+        FixClientSyncObjects(NewCoolerObjectPacketWriteReadSystem.inst);
+        FixClientSyncObjects(CharSync.inst);
+        FixClientSyncObjects(PlrSync.inst);
+    }
+
+    private void FixClientSyncObjects(CoolSyncSubSystemForObjects sync)
+    {
         foreach (var serverObj in sync.server_objects)
         {
             if (sync.client_objects.ContainsKey(serverObj.Key)) continue;
@@ -207,7 +232,8 @@ internal class HostWatcher : MonoBehaviour
                 {
                     netId = serverObj.Value.netId,
                     real_obj = serverObj.Value.real_obj,
-                    cur_packet = serverObj.Value.cur_packet
+                    cur_packet = serverObj.Value.cur_packet,
+                    sys = sync
                 };
         }
 
@@ -242,11 +268,16 @@ internal class HostWatcher : MonoBehaviour
                 Body_PlaceBody_MultiplayerPatch.spawnlocation = ply.body.transform.position;
             }
 
+            // If this is incorrect, it causes sync failures from host -> client,
+            // so client movement shows up on host, but host movement doesn't show
+            // up on client.
             if (ply.server_plrstate == null)
             {
                 ply.server_plrstate = new Server_PlayerState(ply);
                 // TODO: Race condition here with a join during host transition?
                 ply.server_plrstate.is_loaded_in = true;
+                ply.server_plrstate.finished_worldgen = true;
+                ply.server_plrstate.did_give_spawn_location = true;
             }
         }
 
