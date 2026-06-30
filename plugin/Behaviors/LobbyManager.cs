@@ -98,7 +98,9 @@ internal class LobbyManager : MonoBehaviour
             var time = Time.realtimeSinceStartup;
 
             while (_lastLobbyIdx == lastIdx && Time.realtimeSinceStartup - time < 20.0f)
+            {
                 yield return new WaitForSeconds(0.1f);
+            }
 
             yield return new WaitForSeconds(10.0f);
         }
@@ -161,7 +163,9 @@ internal class LobbyManager : MonoBehaviour
                 : 0;
             outLobby.metadata[pchKey] = pchValue;
             if (num == 0)
+            {
                 Plugin.Logger.LogError("SteamMatchmaking.GetLobbyDataByIndex returned false.");
+            }
         }
 
         var numLobbyMembers = SteamMatchmaking.GetNumLobbyMembers(steamIDLobby);

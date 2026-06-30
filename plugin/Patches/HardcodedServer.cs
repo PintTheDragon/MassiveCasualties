@@ -52,7 +52,9 @@ internal static class HardcodedServer
         }
 
         if (count != expected)
+        {
             throw new Exception("GeneralRewrite failed, expected " + expected + " rewrites, got " + count);
+        }
 
         return matcher.Instructions();
     }

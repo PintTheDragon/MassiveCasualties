@@ -37,11 +37,15 @@ internal class HostWatcher : MonoBehaviour
         // Always needed (not just on host swap), and used for
         // communicating to/from the host in the hardcoded server patches.
         if (curID == CSteamID.Nil.m_SteamID)
+        {
             // This relies on the fact that new games start
             // with host ID == 0.
             HardcodedServer.CurHostID = 0;
+        }
         else if (transportSteamworks.SteamIDToClientIDDict.TryGetByFirst(curID, out var hostClientID))
+        {
             HardcodedServer.CurHostID = hostClientID;
+        }
 
 
         // curID == 0 means we left the lobby, oldID == 0
@@ -51,9 +55,13 @@ internal class HostWatcher : MonoBehaviour
         if (curID == CSteamID.Nil.m_SteamID || oldID == CSteamID.Nil.m_SteamID) return;
 
         if (curID == KSteam.GetLocalUserSteamID().m_SteamID)
+        {
             SwitchToHost(transportSteamworks);
+        }
         else
+        {
             ConnectToNewHost(transportSteamworks);
+        }
     }
 
     private void OnDestroy()
@@ -148,9 +156,13 @@ internal class HostWatcher : MonoBehaviour
         if (transportSteamworks.listenSocket != HSteamListenSocket.Invalid)
         {
             if (transportSteamworks.is_steamserver)
+            {
                 SteamGameServerNetworkingSockets.CloseListenSocket(transportSteamworks.listenSocket);
+            }
             else
+            {
                 SteamNetworkingSockets.CloseListenSocket(transportSteamworks.listenSocket);
+            }
 
             transportSteamworks.listenSocket = HSteamListenSocket.Invalid;
         }
@@ -207,8 +219,10 @@ internal class HostWatcher : MonoBehaviour
         sync.client_objects.Clear();
 
         foreach (var ply in ServerMain.AllPlayersExceptHost)
-            // Creates a new perplrstate if one doesn't exist.
+        {
+            // Creates a new perplrstate if one doesn't exist. 
             sync.GetPerPlrState(ply.clientId);
+        }
     }
 
     /// <summary>

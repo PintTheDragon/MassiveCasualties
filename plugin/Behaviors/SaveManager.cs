@@ -129,12 +129,17 @@ internal class SaveManager : MonoBehaviour
             // TODO: Need to add a field-level whitelist.
             var fieldUserProvided = typeof(Body).GetField(bodyField.Name);
             if (fieldUserProvided == null)
+            {
                 Plugin.Logger.LogError(
                     $"Trying to load body field \"{bodyField.Name}\", but such field does not exist. Loading will continue.");
+            }
             else if (!Attribute.IsDefined(fieldUserProvided, typeof(JsonPropertyAttribute)))
+            {
                 Plugin.Logger.LogError(
                     $"Trying to load body field \"{bodyField.Name}\", but it is not a JSON field. Loading will continue.");
+            }
             else
+            {
                 try
                 {
                     var fieldType = fieldUserProvided.FieldType;
@@ -148,6 +153,7 @@ internal class SaveManager : MonoBehaviour
                     Plugin.Logger.LogError(
                         $"Error occured during setting body field \"{fieldUserProvided.Name}\".\n{ex.Message}\n{ex.StackTrace}\nLoading will continue.");
                 }
+            }
         }
     }
 
@@ -155,17 +161,23 @@ internal class SaveManager : MonoBehaviour
     {
         var limbs = jobject["limbs"].Children<JObject>().ToArray();
         for (var i = 0; i < limbs.Length; ++i)
+        {
             foreach (var limbField in limbs[i].Children<JProperty>())
             {
                 // TODO: Need to add a field-level whitelist.
                 var fieldUserProvided = typeof(Limb).GetField(limbField.Name);
                 if (fieldUserProvided == null)
+                {
                     Plugin.Logger.LogError(
                         $"Trying to load limb field \"{limbField.Name}\" on limb \"{ply.body.limbs[i]}\", but such field does not exist. Loading will continue.");
+                }
                 else if (!Attribute.IsDefined(fieldUserProvided, typeof(JsonPropertyAttribute)))
+                {
                     Plugin.Logger.LogError(
                         $"Trying to load limb field \"{limbField.Name}\" on limb \"{ply.body.limbs[i]}\", but it is not a JSON field. Loading will continue.");
+                }
                 else
+                {
                     try
                     {
                         var fieldType = fieldUserProvided.FieldType;
@@ -177,7 +189,9 @@ internal class SaveManager : MonoBehaviour
                         Plugin.Logger.LogError(
                             $"Error occured during setting \"{ply.body.limbs[i]}\" field \"{fieldUserProvided.Name}\".\n{ex.Message}\n{ex.StackTrace}\nLoading will continue.");
                     }
+                }
             }
+        }
     }
 
     private static bool DeserializeItems(NetBody ply, JObject jobject)
@@ -239,9 +253,13 @@ internal class SaveManager : MonoBehaviour
                 if (savedItem.slot >= 0)
                 {
                     if (ply.body.HoldingItem(savedItem.slot))
+                    {
                         ply.body.GetItem(savedItem.slot).GetComponent<Container>().LoadItem(item);
+                    }
                     else
+                    {
                         ply.body.PickUpItem(item, savedItem.slot, true);
+                    }
                 }
                 else if (ply.body.GetWearableBySlotID(savedItem.wearSlot))
                 {
@@ -278,19 +296,27 @@ internal class SaveManager : MonoBehaviour
                 {
                     var component = gameObject.GetComponent(typeUserProvided);
                     if (component == null)
+                    {
                         Plugin.Logger.LogError(
                             $"Error occured during loading item \"{item}\". Component for \"{typeUserProvided.Name}\" doesn't exist on object. Loading will continue.");
+                    }
                     else
+                    {
                         foreach (var componentField in itemComponent.Value.Children<JProperty>())
                         {
                             var fieldUserProvided = typeUserProvided.GetField(componentField.Name);
                             if (fieldUserProvided == null)
+                            {
                                 Plugin.Logger.LogError(
                                     $"Error occured during loading item \"{item}\". Field for \"{componentField.Name}\" doesn't exist. Loading will continue.");
+                            }
                             else if (!Attribute.IsDefined(fieldUserProvided, typeof(JsonPropertyAttribute)))
+                            {
                                 Plugin.Logger.LogError(
                                     $"Error occured during loading item \"{item}\". Field \"{componentField.Name}\" is not a JSON field! Loading will continue.");
+                            }
                             else
+                            {
                                 try
                                 {
                                     var fieldType = fieldUserProvided.FieldType;
@@ -304,7 +330,9 @@ internal class SaveManager : MonoBehaviour
                                     Plugin.Logger.LogError(
                                         $"Error occured during loading item \"{item}\".\n{ex.Message}\n{ex.StackTrace}\nLoading will continue.");
                                 }
+                            }
                         }
+                    }
                 }
             }
         }
@@ -323,9 +351,12 @@ internal class SaveManager : MonoBehaviour
                 var type = SafeGetComponentType(bodyComponent.Name);
                 var component = ply.body.gameObject.GetComponent(type);
                 if (component == null)
+                {
                     Plugin.Logger.LogError(
                         $"Error occured during loading body components. Component \"{bodyComponent.Name}\" does not exist! Loading will continue.");
+                }
                 else
+                {
                     foreach (var bodyField in bodyComponent.Value.Children<JProperty>())
                     {
                         var fieldUserProvided = type.GetField(bodyField.Name);
@@ -346,6 +377,7 @@ internal class SaveManager : MonoBehaviour
                             fieldUserProvided.SetValue(component, obj);
                         }
                     }
+                }
             }
         }
         catch (Exception ex)
@@ -371,9 +403,12 @@ internal class SaveManager : MonoBehaviour
                     var type = SafeGetComponentType(limbComponent.Name);
                     var component = ply.body.limbs[i].gameObject.GetComponent(type);
                     if (component == null)
+                    {
                         Plugin.Logger.LogError(
                             $"Error occured during loading limb components. Component \"{limbComponent.Name}\" does not exist! Loading will continue.");
+                    }
                     else
+                    {
                         foreach (var limbField in limbComponent.Value.Children<JProperty>())
                         {
                             var fieldUserProvided = type.GetField(limbField.Name);
@@ -394,6 +429,7 @@ internal class SaveManager : MonoBehaviour
                                 fieldUserProvided.SetValue(component, obj);
                             }
                         }
+                    }
                 }
             }
         }
@@ -447,7 +483,9 @@ internal class SaveManager : MonoBehaviour
     private static object SafeToObject(JToken token, Type type)
     {
         if (!TypeWhitelist.IsTypeAllowed(type))
+        {
             throw new Exception($"Cannot deserialize type {type.FullName} (not allowed).");
+        }
 
         var secureSerializer = new JsonSerializer
         {
@@ -470,7 +508,9 @@ internal class SaveManager : MonoBehaviour
     private static object SafeChangeType(object value, Type type)
     {
         if (!TypeWhitelist.IsTypeAllowed(type))
+        {
             throw new Exception($"Cannot convert type {type.FullName} (not allowed).");
+        }
 
         return Convert.ChangeType(value, type);
     }
@@ -510,7 +550,9 @@ internal class TypeWhitelist : DefaultContractResolver
 
         if (type.IsArray) return IsTypeAllowed(type.GetElementType());
         if (type.IsGenericType && type.GetGenericTypeDefinition() == typeof(List<>))
+        {
             return IsTypeAllowed(type.GetGenericArguments()[0]);
+        }
 
         return AllowedTypes.Contains(type);
     }
@@ -518,7 +560,9 @@ internal class TypeWhitelist : DefaultContractResolver
     protected override JsonObjectContract CreateObjectContract(Type objectType)
     {
         if (!IsTypeAllowed(objectType))
+        {
             throw new Exception($"Refusing to deserialize object of type ${objectType.FullName}.");
+        }
 
         return base.CreateObjectContract(objectType);
     }
