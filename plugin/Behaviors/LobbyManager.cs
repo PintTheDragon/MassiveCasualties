@@ -38,6 +38,8 @@ internal class LobbyManager : MonoBehaviour
         if (!Net.TryGetSteamTransport(out _)) yield break;
         if (lobbyID == KSteam.CURRENT_LOBBY.lobby_steamID || lobbyID == CSteamID.Nil) yield break;
 
+        SaveManager.SaveBeforeSessionChange();
+
         KrokoshaScavMultiplayer.ShutdownNetwork();
 
         // There's severe desync if we don't enter the lobby first.
