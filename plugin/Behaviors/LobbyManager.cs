@@ -2,6 +2,7 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using KrokoshaCasualtiesMP;
+using KrokoshaCasualtiesUtils;
 using Steamworks;
 using UnityEngine;
 
@@ -16,6 +17,34 @@ internal class LobbyManager : MonoBehaviour
     internal static readonly List<KSteam.Lobby> Lobbies = new();
     private static int _lastLobbyIdx;
 
+    private static bool _isMcEnabled;
+
+    /// <summary>
+    ///     Whether the user enabled MC for their lobbies.
+    ///     Use IsMcAvailable for game behavior, since it might
+    ///     be enabled but unavailable.
+    /// </summary>
+    internal static bool IsMcEnabled
+    {
+        get => _isMcEnabled;
+        set
+        {
+            _isMcEnabled = value;
+            if (_isMcEnabled)
+            {
+                SetMultiplayerSettings();
+            }
+
+            PlayerPrefsExtended.SetBool("MASSIVECASUALTIES_SERVER_ENABLED", value);
+        }
+    }
+
+    /// <summary>
+    ///     Whether MC is enabled for lobbies this player is hosting.
+    ///     They may not be in an MC-label lobby, however.
+    /// </summary>
+    internal static bool IsMcAvailable => IsMcEnabled && KSteam.Loaded;
+
     /// <summary>
     ///     Returns whether we're connected to a MC-enabled lobby.
     /// </summary>
@@ -26,6 +55,8 @@ internal class LobbyManager : MonoBehaviour
     private void Awake()
     {
         Singleton = this;
+
+        _isMcEnabled = PlayerPrefsExtended.GetBool("MASSIVECASUALTIES_SERVER_ENABLED", true);
     }
 
     private void OnDestroy()
@@ -38,6 +69,88 @@ internal class LobbyManager : MonoBehaviour
         _lobbyDataCallback = CallResult<LobbyMatchList_t>.Create(OnLobbyList);
 
         Singleton.StartCoroutine(UpdateLobbiesLoop());
+    }
+
+    /// <summary>
+    ///     Configures the required multiplayer preset for MC.
+    /// </summary>
+    private static void SetMultiplayerSettings()
+    {
+        // TODO: Need to enfore mod list, but probably with a custom system.
+
+        UIMainMenu._USE_STEAM_MENU = true;
+        // TODO: Some sort of invisible?
+        UIMainMenu._STEAM_CHOSEN_LOBBYTYPE = (int)ELobbyType.k_ELobbyTypePublic;
+
+        KrokoshaScavMultiplayer.INPUT_PASSWORD = "";
+
+        var rules = KrokoshaScavMultiplayer.rules;
+
+        rules.sv_cheats = false;
+        rules.AllowClientCheatCommands = false;
+        // TODO: Allow editing?
+        rules.PLAYER_COUNT_LIMIT = 6;
+        rules.ShowPlayerDirections = true;
+        rules.EnableNametags = true;
+        rules.EnableStatusIcons = true;
+        rules.UnchippedHideNametags = true;
+        rules.EnableChatbox = true;
+        rules.OnlyProximityChat = false;
+        rules.UnchippedProximityChat = true;
+        rules.UnchippedIsIndividual = true;
+        rules.ScatterMinGroupSize = 0;
+        rules.ScatterPunishDistance = 0.0f;
+        // TODO: Layer system needs to be reworked, spawn off to a separate instance.
+        rules.LayerFinishPlrPercent = 60;
+        rules.LayerFinishKeepXOffset = true;
+        rules.StragglerRadlinePercent = 30;
+        rules.NoInventoryLock = false;
+        rules.EnableSleep = true;
+        rules.EnableTimeManipulation = false;
+        rules.SpeechImpairedChat = true;
+        rules.HearingLossChat = true;
+        rules.MindwipeDisablesChat = false;
+        rules.DeadTextchat = true;
+        rules.DeadVoicechat = true;
+        rules.SleepingMute = false;
+        rules.Permadeath = false;
+        rules.ReviveOnNextLevel = false;
+        rules.ReviveFromTrader = true;
+        rules.RespawnKeepInventory = false;
+        rules.RespawnKeepSkills = false;
+        rules.AllowSpectatorFreecam = true;
+        rules.AllowPush = true;
+        rules.AlwaysAllowCarry = false;
+        rules.PiggybackMaxStack = 1;
+        rules.PiggybackWeightMultiplier = 0.8f;
+        rules.SpectateWhileUnconscious = false;
+        rules.EnableMP3Sync = false;
+        rules.VoicechatQuality = 4;
+        rules.VoicechatEnabled = true;
+        rules.ProximityHearDistance = 55f;
+        rules.CharacterYapPublic = true;
+        rules.Teams = false;
+        rules.PVP = false;
+        rules.PVPCombatDismember = true;
+        rules.PVPMoodDebuff = 0.5f;
+        rules.PVPDamageMultiplier = 1f;
+        rules.LateJoinAllowed = true;
+        rules.LateJoinSpectate = false;
+        rules.AmputateHealthyPlayers = false;
+        rules.AdditionalBrainRegen = 1f;
+        rules.AdditionalHealthRegen = 1f;
+        rules.AdditionalHealthDecay = 1f;
+        rules.LastStandAllowed = true;
+        rules.SelfharmWitnessMoodDebuff = 3f;
+        rules.SavePlayerState = false;
+        rules.SavePlayerInventory = false;
+        rules.SavePlayerPosition = true;
+        rules.AutoContinue = false;
+        rules.AutoMinPlrsToStart = 2;
+        rules.AutoExitWhenAllDied = false;
+        rules.AutoExitWhenAllLeft = true;
+
+        KrokoshaScavMultiplayer.rules = rules;
     }
 
     private static IEnumerator Connect(CSteamID lobbyID)
