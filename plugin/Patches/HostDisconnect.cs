@@ -16,8 +16,14 @@ internal static class DisconnectPatchTransport
     private static readonly MethodInfo OriginalDisconnectMethod =
         SymbolExtensions.GetMethodInfo(() => KrokoshaScavMultiplayer.ShutdownNetwork());
 
+    private static readonly MethodInfo OriginalRemoveUserMethod =
+        SymbolExtensions.GetMethodInfo((TransportSteamworks t) => t.RemoveSteamUser(0));
+
     private static readonly MethodInfo NewDisconnectMethod =
         SymbolExtensions.GetMethodInfo(() => DisconnectReplacement(null));
+
+    private static readonly MethodInfo NewRemoveUserMethod =
+        SymbolExtensions.GetMethodInfo(() => RemoveReplacement(null, 0));
 
     private static readonly MethodInfo GetIsMcLobby = typeof(LobbyManager).GetMethod(
         "get_" + nameof(LobbyManager.IsMcLobby),
@@ -44,6 +50,13 @@ internal static class DisconnectPatchTransport
             .SetAndAdvance(OpCodes.Call, NewDisconnectMethod)
             // return;
             .InsertAndAdvance(new CodeInstruction(OpCodes.Ret))
+
+            // Prevent disconnecting users immediately, since this can
+            // happen during host change.
+            .MatchForward(false, new CodeMatch(OpCodes.Call, OriginalRemoveUserMethod))
+            .ThrowIfInvalid("Failed to find RemoveSteamUser!")
+            // DisconnectReplacement(this);
+            .SetOperandAndAdvance(NewRemoveUserMethod)
             .Instructions();
     }
 
@@ -59,6 +72,23 @@ internal static class DisconnectPatchTransport
         {
             KrokoshaScavMultiplayer.ShutdownNetwork();
         }
+    }
+
+    /// <summary>
+    ///     This happens when we lose connect to a user.
+    ///     Normally, the user is immediately removed, but because
+    ///     host swaps cause this to happen, we need to be more careful
+    ///     and only remove them if we're sure they actually disconnected.
+    /// </summary>
+    private static void RemoveReplacement(TransportSteamworks transportSteamworks, ulong steamID)
+    {
+        if (!LobbyManager.IsMcLobby)
+        {
+            transportSteamworks.RemoveSteamUser(steamID);
+            return;
+        }
+
+        HostWatcher.HostRemoveSteamUser(transportSteamworks, steamID);
     }
 }
 
@@ -101,13 +131,19 @@ internal static class DisconnectPatchChat
     /// </summary>
     private static void DisconnectReplacement()
     {
+        ConsoleScript.instance.LogToConsole("Triggered DisconnectPatchChat");
+
+        if (!LobbyManager.IsMcLobby)
+        {
+            KrokoshaScavMultiplayer.ShutdownNetwork();
+            return;
+        }
+
         if (!Net.TryGetSteamTransport(out var transportSteamworks))
         {
             Plugin.Logger.LogError("DisconnectReplacement couldn't find TransportSteamworks (shouldn't be possible)!");
             return;
         }
-
-        ConsoleScript.instance.LogToConsole("Triggered DisconnectPatchChat");
 
         // These need to be cleared, otherwise the host won't be able
         // to reconnect.

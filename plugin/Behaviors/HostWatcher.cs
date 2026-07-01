@@ -83,6 +83,42 @@ internal class HostWatcher : MonoBehaviour
         if (Singleton._cachedHostID == CSteamID.Nil.m_SteamID) HardcodedServer.CurHostID = 0;
     }
 
+    /// <summary>
+    ///     Removes the given steam user only if it's safe to do so (i.e., we're not accidentally
+    ///     removing them during a host change).
+    ///     This is only callable on the host, and does nothing on the client.
+    /// </summary>
+    internal static void HostRemoveSteamUser(TransportSteamworks transportSteamworks, ulong steamID)
+    {
+        Singleton.StartCoroutine(RemoveSteamUserCoroutine(transportSteamworks, steamID));
+    }
+
+    private static IEnumerator RemoveSteamUserCoroutine(TransportSteamworks transportSteamworks, ulong steamID)
+    {
+        var oldHostID = GetOwnerID().m_SteamID;
+        if (oldHostID != KSteam.GetLocalUserSteamID().m_SteamID || !Net.is_server)
+        {
+            // We weren't the host to begin with, so we shouldn't
+            // be disconnecting anyone.
+            yield break;
+        }
+
+        // Enough time to allow for network hiccups.
+        yield return new WaitForSeconds(5.0f);
+
+        var newHostID = GetOwnerID().m_SteamID;
+        if (newHostID != oldHostID || !Net.is_server)
+        {
+            // We're no longer the host, so we shouldn't be doing this.
+            // This is the real case to protect against: during a host
+            // change, connections are dropped and RemoveSteamUser is called,
+            // even though no users should really be removed.
+            yield break;
+        }
+
+        transportSteamworks.RemoveSteamUser(steamID);
+    }
+
     private static CSteamID GetOwnerID()
     {
         // Sometimes, lobby_steamID is unset while ownerID is unchanged.
