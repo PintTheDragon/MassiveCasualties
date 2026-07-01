@@ -24,7 +24,7 @@ internal class SaveManager : MonoBehaviour
     ///     they moved to a new session.
     ///     This can be when they're either a host or a client.
     /// </summary>
-    private static SaveInfo _lastSessionSave;
+    internal static SaveInfo LastSessionSave { get; private set; }
 
     internal static void SaveBeforeSessionChange()
     {
@@ -39,7 +39,7 @@ internal class SaveManager : MonoBehaviour
     {
         InternalSavePatched();
 
-        Plugin.Logger.LogInfo("Saved session - " + _lastSessionSave.cId);
+        Plugin.Logger.LogInfo("Saved session - " + LastSessionSave.cId);
     }
 
     private static void SaveWorld()
@@ -81,7 +81,7 @@ internal class SaveManager : MonoBehaviour
 
     private static void SaveCallback(SaveInfo saveInfo)
     {
-        _lastSessionSave = saveInfo;
+        LastSessionSave = saveInfo;
 
         var json = JObject.Parse(JsonConvert.SerializeObject(saveInfo, Formatting.None, new JsonSerializerSettings
         {
@@ -92,12 +92,26 @@ internal class SaveManager : MonoBehaviour
     }
 
     /// <summary>
+    ///     Serializes a SaveInfo into a JSON string.
+    ///     May throw an error.
+    /// </summary>
+    internal static string SerializeSave(SaveInfo saveInfo)
+    {
+        return JsonConvert.SerializeObject(saveInfo, Formatting.None, new JsonSerializerSettings
+        {
+            ReferenceLoopHandling = ReferenceLoopHandling.Ignore
+        });
+    }
+
+    /// <summary>
     ///     Tries to load the given jobject (serialized SaveInfo) into the body.
     ///     This is a modified version of SaveSystem.TryLoad, with some extra strictness
     ///     to make it safer for arbitrary input.
     /// </summary>
     internal static bool LoadSaveForPlayer(NetBody ply, JObject jobject)
     {
+        if (ply == null || jobject == null) return false;
+
         try
         {
             DeserializeBody(ply, jobject);

@@ -56,6 +56,10 @@
         <Reference Include="Unity.TextMeshPro">
             <HintPath>$(GameAssembliesDir)/Unity.TextMeshPro.dll</HintPath>
         </Reference>
+
+        <Reference Include="Unity.VisualScripting.Core">
+            <HintPath>$(GameAssembliesDir)/Unity.VisualScripting.Core.dll</HintPath>
+        </Reference>
     </ItemGroup>
 
     <ItemGroup Condition="'$(TargetFramework.TrimEnd(`0123456789`))' == 'net'">

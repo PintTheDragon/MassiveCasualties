@@ -16,6 +16,13 @@ internal class LobbyManager : MonoBehaviour
     internal static readonly List<KSteam.Lobby> Lobbies = new();
     private static int _lastLobbyIdx;
 
+    /// <summary>
+    ///     Returns whether we're connected to a MC-enabled lobby.
+    /// </summary>
+    internal static bool IsMcLobby =>
+        KSteam.CURRENT_LOBBY != null &&
+        KSteam.CURRENT_LOBBY.metadata.ContainsKey("CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION");
+
     private void Awake()
     {
         Singleton = this;

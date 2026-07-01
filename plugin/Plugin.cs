@@ -4,6 +4,7 @@ using BepInEx.Logging;
 using HarmonyLib;
 using MassiveCasualties.Behaviors;
 using MassiveCasualties.Commands;
+using MassiveCasualties.Network;
 using MassiveCasualties.Patches;
 
 namespace MassiveCasualties;
@@ -34,6 +35,8 @@ public class Plugin : BaseUnityPlugin
 
             ChangeHost.Register();
             JoinRandom.Register();
+
+            NetRegistration.Register();
 
             PatchSteamLobby.Init();
         }
