@@ -47,12 +47,15 @@ internal class HostWatcher : MonoBehaviour
             HardcodedServer.CurHostID = hostClientID;
         }
 
-
         // curID == 0 means we left the lobby, oldID == 0
         // means we just joined one.
         // In any case, we can defer to the default multiplayer
         // behavior.
         if (curID == CSteamID.Nil.m_SteamID || oldID == CSteamID.Nil.m_SteamID) return;
+
+        // If it isn't an MC lobby, then we won't perform host swapping, as everyone
+        // will leave anyway (and I don't want to support that use case).
+        if (!LobbyManager.IsMcLobby) return;
 
         if (curID == KSteam.GetLocalUserSteamID().m_SteamID)
         {

@@ -15,7 +15,7 @@ internal class Worldgen
     [ServerReceiver((ushort)MessageType.WorldPlacePlayerWithSave)]
     internal static void Server_WorldPlacePlayerWithSave(knetid clientId, ref NetDataReader reader)
     {
-        if (!Util.IsInWorld()) return;
+        if (!Util.IsInWorld() || !LobbyManager.IsMcLobby) return;
 
         NetPlayer plr;
         if (!NetPlayer.TryGetPlayerFromClientId(clientId, out plr) ||

@@ -106,7 +106,6 @@ public class MainMenuPatch
 
     [HarmonyPatch(nameof(UIMainMenu._GUI___DirectConnect_DoSteamInfoo))]
     [HarmonyTranspiler]
-    [HarmonyDebug]
     private static IEnumerable<CodeInstruction> DisableLobbyType(IEnumerable<CodeInstruction> instructions,
         ILGenerator generator)
     {

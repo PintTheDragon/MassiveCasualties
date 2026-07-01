@@ -50,7 +50,10 @@ internal class LobbyManager : MonoBehaviour
     /// </summary>
     internal static bool IsMcLobby =>
         KSteam.CURRENT_LOBBY != null &&
-        KSteam.CURRENT_LOBBY.metadata.ContainsKey("CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION");
+        (KSteam.CURRENT_LOBBY.metadata.ContainsKey("CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION") ||
+         // If we're the host and MC is running, it means it was always an MC lobby.
+         // Host swapping could have happened, but only if it was an MC lobby to begin with.
+         (Net.is_server && IsMcAvailable));
 
     private void Awake()
     {
@@ -69,6 +72,11 @@ internal class LobbyManager : MonoBehaviour
         _lobbyDataCallback = CallResult<LobbyMatchList_t>.Create(OnLobbyList);
 
         Singleton.StartCoroutine(UpdateLobbiesLoop());
+
+        if (IsMcEnabled)
+        {
+            SetMultiplayerSettings();
+        }
     }
 
     /// <summary>
@@ -77,6 +85,8 @@ internal class LobbyManager : MonoBehaviour
     private static void SetMultiplayerSettings()
     {
         // TODO: Need to enfore mod list, but probably with a custom system.
+
+        // TODO: Need game mode select to be limited.
 
         UIMainMenu._USE_STEAM_MENU = true;
         // TODO: Some sort of invisible?
@@ -189,7 +199,7 @@ internal class LobbyManager : MonoBehaviour
     {
         while (true)
         {
-            if (!KSteam.Loaded || _lobbyDataCallback == null)
+            if (!KSteam.Loaded || _lobbyDataCallback == null || !IsMcAvailable)
             {
                 yield return new WaitForSeconds(1.0f);
                 continue;

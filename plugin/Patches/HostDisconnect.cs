@@ -19,16 +19,26 @@ internal static class DisconnectPatchTransport
     private static readonly MethodInfo NewDisconnectMethod =
         SymbolExtensions.GetMethodInfo(() => DisconnectReplacement(null));
 
+    private static readonly MethodInfo GetIsMcLobby = typeof(LobbyManager).GetMethod(
+        "get_" + nameof(LobbyManager.IsMcLobby),
+        BindingFlags.Static | BindingFlags.NonPublic);
+
     [HarmonyPatch(nameof(TransportSteamworks.OnConnectionStatusChanged))]
     [HarmonyTranspiler]
-    private static IEnumerable<CodeInstruction> PreventDisconnect(IEnumerable<CodeInstruction> instructions)
+    private static IEnumerable<CodeInstruction> PreventDisconnect(IEnumerable<CodeInstruction> instructions,
+        ILGenerator generator)
     {
-        return new CodeMatcher(instructions)
+        return new CodeMatcher(instructions, generator)
             // Prevent disconnecting when the host leaves, since steam will
             // assign a new host (maybe us).
             // TODO: Need to restrict to only MC lobbies
             .MatchForward(false, new CodeMatch(OpCodes.Call, OriginalDisconnectMethod))
             .ThrowIfInvalid("Failed to find ShutdownNetwork!")
+            .CreateLabel(out var originalCode)
+            // if (!IsMcLobby) jump to original
+            .InsertAndAdvance(
+                new CodeInstruction(OpCodes.Call, GetIsMcLobby),
+                new CodeInstruction(OpCodes.Brfalse, originalCode))
             // DisconnectReplacement(this);
             .InsertAndAdvance(new CodeInstruction(OpCodes.Ldarg_0))
             .SetAndAdvance(OpCodes.Call, NewDisconnectMethod)
@@ -44,6 +54,11 @@ internal static class DisconnectPatchTransport
     private static void DisconnectReplacement(TransportSteamworks transportSteamworks)
     {
         ConsoleScript.instance.LogToConsole("Triggered DisconnectPatchTransport");
+
+        if (!LobbyManager.IsMcLobby)
+        {
+            KrokoshaScavMultiplayer.ShutdownNetwork();
+        }
     }
 }
 
@@ -56,13 +71,23 @@ internal static class DisconnectPatchChat
     private static readonly MethodInfo NewDisconnectMethod =
         SymbolExtensions.GetMethodInfo(() => DisconnectReplacement());
 
+    private static readonly MethodInfo GetIsMcLobby = typeof(LobbyManager).GetMethod(
+        "get_" + nameof(LobbyManager.IsMcLobby),
+        BindingFlags.Static | BindingFlags.NonPublic);
+
     [HarmonyPatch(nameof(KSteam.OnLobbyChatUpdate))]
     [HarmonyTranspiler]
-    private static IEnumerable<CodeInstruction> PreventDisconnect(IEnumerable<CodeInstruction> instructions)
+    private static IEnumerable<CodeInstruction> PreventDisconnect(IEnumerable<CodeInstruction> instructions,
+        ILGenerator generator)
     {
-        return new CodeMatcher(instructions)
+        return new CodeMatcher(instructions, generator)
             .MatchForward(false, new CodeMatch(OpCodes.Ldstr, "LOBBY OWNER LEFT, LEAVING"))
             .ThrowIfInvalid("Failed to find chat shutdown!")
+            .CreateLabel(out var originalCode)
+            // if (!IsMcLobby) jump to original
+            .InsertAndAdvance(
+                new CodeInstruction(OpCodes.Call, GetIsMcLobby),
+                new CodeInstruction(OpCodes.Brfalse, originalCode))
             // DisconnectReplacement();
             .InsertAndAdvance(new CodeInstruction(OpCodes.Call, NewDisconnectMethod))
             // return;

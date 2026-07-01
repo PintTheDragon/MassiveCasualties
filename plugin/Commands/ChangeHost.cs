@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using CUCoreLib.Helpers;
 using CUCoreLib.Registries;
 using KrokoshaCasualtiesMP;
+using MassiveCasualties.Behaviors;
 using Steamworks;
 
 namespace MassiveCasualties.Commands;
@@ -26,9 +27,9 @@ internal static class ChangeHost
             return;
         }
 
-        if (Net.TRANSPORT is not TransportSteamworks transportSteamworks)
+        if (Net.TRANSPORT is not TransportSteamworks transportSteamworks || !LobbyManager.IsMcLobby)
         {
-            ConsoleScript.instance.LogToConsole("This only works in steam lobbies!");
+            ConsoleScript.instance.LogToConsole("This only works in MassiveCasualties lobbies!");
             return;
         }
 

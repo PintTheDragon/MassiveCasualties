@@ -99,7 +99,10 @@ internal static class PatchSteamLobby
     /// </summary>
     private static void AddLobbyDataPrefix()
     {
-        SteamMatchmaking.SetLobbyData(KSteam.lobbyId, "CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION",
-            Plugin.ModVersion);
+        if (LobbyManager.IsMcLobby)
+        {
+            SteamMatchmaking.SetLobbyData(KSteam.lobbyId, "CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION",
+                Plugin.ModVersion);
+        }
     }
 }
