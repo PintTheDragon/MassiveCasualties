@@ -52,7 +52,6 @@ internal class SaveManager : MonoBehaviour
     /// </summary>
     [HarmonyReversePatch]
     [HarmonyPatch(typeof(SaveSystem), nameof(SaveSystem.SaveGame))]
-    [HarmonyDebug]
     private static void InternalSavePatched()
     {
         IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions)
