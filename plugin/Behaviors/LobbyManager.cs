@@ -96,8 +96,8 @@ internal class LobbyManager : MonoBehaviour
 
         var rules = KrokoshaScavMultiplayer.rules;
 
-        rules.sv_cheats = false;
-        rules.AllowClientCheatCommands = false;
+        rules.sv_cheats = Plugin.DEV;
+        rules.AllowClientCheatCommands = Plugin.DEV;
         // TODO: Allow editing?
         rules.PLAYER_COUNT_LIMIT = 6;
         rules.ShowPlayerDirections = true;
@@ -163,7 +163,15 @@ internal class LobbyManager : MonoBehaviour
         KrokoshaScavMultiplayer.rules = rules;
     }
 
-    private static IEnumerator Connect(CSteamID lobbyID)
+    /// <summary>
+    ///     Connects to a different lobby while currently in a game.
+    /// </summary>
+    internal static void ConnectFromGame(CSteamID lobbyID)
+    {
+        Singleton.StartCoroutine(ConnectCoroutine(lobbyID));
+    }
+
+    private static IEnumerator ConnectCoroutine(CSteamID lobbyID)
     {
         if (!Net.TryGetSteamTransport(out _)) yield break;
         if (lobbyID == KSteam.CURRENT_LOBBY.lobby_steamID || lobbyID == CSteamID.Nil) yield break;
@@ -184,15 +192,20 @@ internal class LobbyManager : MonoBehaviour
         TransportSteamworks.OnWantToJoinLobby(lobbyID.m_SteamID);
     }
 
-    internal static void JoinRandom()
+    /// <summary>
+    ///     Returns a random valid MC lobby that isn't the current one,
+    ///     or Nil if none can be found.
+    /// </summary>
+    internal static CSteamID GetRandom()
     {
         foreach (var lobby in Lobbies)
         {
             if (lobby.lobby_steamID == KSteam.CURRENT_LOBBY.lobby_steamID) continue;
 
-            Singleton.StartCoroutine(Connect(lobby.lobby_steamID));
-            break;
+            return lobby.lobby_steamID;
         }
+
+        return CSteamID.Nil;
     }
 
     private static IEnumerator UpdateLobbiesLoop()

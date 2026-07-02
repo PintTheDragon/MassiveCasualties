@@ -1,3 +1,4 @@
+using CUCoreLib.Helpers;
 using CUCoreLib.Registries;
 using MassiveCasualties.Behaviors;
 
@@ -15,6 +16,8 @@ internal static class JoinRandom
 
     private static void Run(string[] args)
     {
-        LobbyManager.JoinRandom();
+        CUCoreUtils.ConsoleCheckForWorld(ConsoleScript.instance);
+
+        LobbyManager.ConnectFromGame(LobbyManager.GetRandom());
     }
 }

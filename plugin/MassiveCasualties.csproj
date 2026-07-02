@@ -70,6 +70,15 @@
         />
     </ItemGroup>
 
+    <ItemGroup>
+        <Folder Include="Images\"/>
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Remove="Images\Teleporter.png"/>
+        <EmbeddedResource Include="Images\teleporter.png"/>
+    </ItemGroup>
+
     <PropertyGroup>
         <RequiredFilesToCopy>
             $(ProjectName).dll;

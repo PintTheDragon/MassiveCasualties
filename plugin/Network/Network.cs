@@ -9,7 +9,8 @@ namespace MassiveCasualties.Network;
 /// </summary>
 internal enum MessageType : ushort
 {
-    WorldPlacePlayerWithSave = 1500
+    WorldPlacePlayerWithSave = 1500,
+    GetTeleporterLobby = 1501
 }
 
 internal static class NetRegistration

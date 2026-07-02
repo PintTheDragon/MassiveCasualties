@@ -2,11 +2,12 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using HarmonyLib;
 using KrokoshaCasualtiesMP;
+using MassiveCasualties.Network;
 
 namespace MassiveCasualties.Patches;
 
 [HarmonyPatch(typeof(NetObjectRegistry))]
-public class NetObjectRegistryPatch
+internal class NetObjectRegistryPatch
 {
     /// <summary>
     ///     There's a bug where non-networked objects are added to the server.
@@ -35,5 +36,23 @@ public class NetObjectRegistryPatch
                 new CodeInstruction(OpCodes.Ret)
             )
             .Instructions();
+    }
+}
+
+[HarmonyPatch(typeof(ItemOrBuildingCoolDeltaCompressablePacket))]
+internal class ItemBuildingSyncPacketPatch
+{
+    [HarmonyPatch(nameof(ItemOrBuildingCoolDeltaCompressablePacket.WriteObjectIntoPacket))]
+    [HarmonyPostfix]
+    private static void WriteObjectIntoPacket(ref ItemOrBuildingCoolDeltaCompressablePacket __instance, SyncInfo si)
+    {
+        ObjectSync.UpdatePacket(ref __instance, si);
+    }
+
+    [HarmonyPatch(nameof(ItemOrBuildingCoolDeltaCompressablePacket.ReadPacketIntoObject))]
+    [HarmonyPostfix]
+    private static void ReadPacketIntoObject(ref ItemOrBuildingCoolDeltaCompressablePacket __instance, SyncInfo si)
+    {
+        ObjectSync.ApplyPacket(__instance, si);
     }
 }

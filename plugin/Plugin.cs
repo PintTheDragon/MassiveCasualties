@@ -5,6 +5,7 @@ using HarmonyLib;
 using MassiveCasualties.Behaviors;
 using MassiveCasualties.Commands;
 using MassiveCasualties.Network;
+using MassiveCasualties.Objects;
 using MassiveCasualties.Patches;
 
 namespace MassiveCasualties;
@@ -17,6 +18,8 @@ public class Plugin : BaseUnityPlugin
     public const string ModVersion = "0.0.0";
 
     internal new static ManualLogSource Logger;
+
+    internal static readonly bool DEV = false;
     private readonly Harmony _harmony = new(ModGUID);
     public static Plugin Instance { get; private set; } = null!;
 
@@ -35,6 +38,8 @@ public class Plugin : BaseUnityPlugin
 
             ChangeHost.Register();
             JoinRandom.Register();
+
+            Teleporter.Register();
 
             NetRegistration.Register();
 
