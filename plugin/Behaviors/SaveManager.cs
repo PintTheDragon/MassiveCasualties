@@ -3,16 +3,30 @@
 // any license that the rest of the project is distributed under.
 
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System.Reflection.Emit;
 using HarmonyLib;
 using KrokoshaCasualtiesMP;
+using LiteNetLib.Utils;
 using MassiveCasualties.Patches;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Newtonsoft.Json.Serialization;
+using Steamworks;
+using Unity.VisualScripting;
 using UnityEngine;
+using CoolSyncSubSystemForObjects = KrokoshaCasualtiesMP.CoolSyncSubSystemForObjects;
+using knetid = KrokoshaCasualtiesMP.knetid;
+using KSteam = KrokoshaCasualtiesMP.KSteam;
+using NetBody = KrokoshaCasualtiesMP.NetBody;
+using NetPlayer = KrokoshaCasualtiesMP.NetPlayer;
+using NewCoolerObjectPacketWriteReadSystem = KrokoshaCasualtiesMP.NewCoolerObjectPacketWriteReadSystem;
+using Random = UnityEngine.Random;
+using SavesystemPatch = KrokoshaCasualtiesMP.SavesystemPatch;
+using WorldGeneration_GenerateWorld_MultiplayerPatch =
+    KrokoshaCasualtiesMP.WorldGeneration_GenerateWorld_MultiplayerPatch;
 
 namespace MassiveCasualties.Behaviors;
 
@@ -25,6 +39,10 @@ internal class SaveManager : MonoBehaviour
     ///     This can be when they're either a host or a client.
     /// </summary>
     internal static SaveInfo LastSessionSave { get; private set; }
+
+    internal static WorldSave LastWorldSave { get; private set; }
+
+    internal static CSteamID LastWorldSaveLobby { get; private set; }
 
     internal static void SaveBeforeSessionChange()
     {
@@ -44,7 +62,9 @@ internal class SaveManager : MonoBehaviour
 
     private static void SaveWorld()
     {
-        // TODO: SaveWorld.
+        // TODO: Support multiple saves (store lobby ID) and dead players.
+        LastWorldSave = new WorldSave(NetPlayer.LOCAL_PLAYER.playerbody.position);
+        LastWorldSaveLobby = KSteam.CURRENT_LOBBY.lobby_steamID;
     }
 
     /// <summary>
@@ -69,7 +89,7 @@ internal class SaveManager : MonoBehaviour
             // easier to preserve the original ldloc.s.
             matcher.InsertAndAdvance(matcher.Instruction.Clone());
             matcher.InsertAndAdvance(new CodeInstruction(OpCodes.Call,
-                SymbolExtensions.GetMethodInfo(() => SaveCallback(null))));
+                SymbolExtensions.GetMethodInfo(() => PlayerSaveCallback(null))));
             matcher.InsertAndAdvance(new CodeInstruction(OpCodes.Ret));
 
             return matcher
@@ -79,7 +99,7 @@ internal class SaveManager : MonoBehaviour
         _ = Transpiler(null);
     }
 
-    private static void SaveCallback(SaveInfo saveInfo)
+    private static void PlayerSaveCallback(SaveInfo saveInfo)
     {
         LastSessionSave = saveInfo;
 
@@ -95,7 +115,7 @@ internal class SaveManager : MonoBehaviour
     ///     Serializes a SaveInfo into a JSON string.
     ///     May throw an error.
     /// </summary>
-    internal static string SerializeSave(SaveInfo saveInfo)
+    internal static string SerializePlayerSave(SaveInfo saveInfo)
     {
         return JsonConvert.SerializeObject(saveInfo, Formatting.None, new JsonSerializerSettings
         {
@@ -114,6 +134,17 @@ internal class SaveManager : MonoBehaviour
 
         try
         {
+            // Their items must be cleared (mostly, emergency flashlight),
+            // otherwise inventory loading will cause errors.
+            for (var slot = 0; slot < ply.body.slots.Length; slot++)
+            {
+                var item = ply.body.GetItem(slot);
+                if (item != null)
+                {
+                    DestroyImmediate(item.gameObject);
+                }
+            }
+
             DeserializeBody(ply, jobject);
 
             DeserializeLimbs(ply, jobject);
@@ -578,5 +609,235 @@ internal class TypeWhitelist : DefaultContractResolver
         }
 
         return base.CreateObjectContract(objectType);
+    }
+}
+
+internal class WorldSave
+{
+    /// <summary>
+    ///     The save we're currently loading, or null if no
+    ///     save is being loaded.
+    /// </summary>
+    private static WorldSave _loadingSave;
+
+    private static bool _placedTiles;
+    private static bool _placedEntities;
+
+    private readonly int _biomeDepth;
+    private readonly byte[] _blocks;
+    private readonly byte[] _fluids;
+    private readonly byte[] _objects;
+    private readonly int _randS0;
+    private readonly int _randS1;
+    private readonly int _randS2;
+    private readonly int _randS3;
+    private readonly float _returnX;
+    private readonly float _returnY;
+    private readonly int _totalTraveled;
+
+    /// <summary>
+    ///     Turns the current world into a save.
+    ///     This MUST be called on the server.
+    /// </summary>
+    /// <param name="returnPos">The position to return the player to when the save is loaded.</param>
+    internal WorldSave(Vector2 returnPos)
+    {
+        _returnX = returnPos.x;
+        _returnY = returnPos.y;
+        _biomeDepth = WorldGeneration.world.biomeDepth;
+        _totalTraveled = WorldGeneration.world.totalTraveled;
+
+        var rand = WorldGeneration_GenerateWorld_MultiplayerPatch.firstworldgenparams.randomstate;
+        _randS0 = rand.s0;
+        _randS1 = rand.s1;
+        _randS2 = rand.s2;
+        _randS3 = rand.s3;
+
+        _blocks = SavesystemPatch.SerializeWorldBlocks();
+        _fluids = SavesystemPatch.SerializeWorldFluids();
+        _objects = SerializeNetObjects();
+    }
+
+    /// <summary>
+    ///     Marks the save for loading on the next world generation.
+    /// </summary>
+    internal void Load()
+    {
+        _loadingSave = this;
+
+        _placedTiles = false;
+        _placedEntities = false;
+    }
+
+    /// <summary>
+    ///     Applies any pending rules from this save to state,
+    ///     which must be a reference to WorldGeneration_GenerateWorld_MultiplayerPatch.firstworldgenparams.
+    /// </summary>
+    internal static void ApplyWorldgenRules(ref LastBeforeGenerationState state)
+    {
+        if (_loadingSave == null) return;
+
+        state.randomstate = new Random.State
+        {
+            s0 = _loadingSave._randS0,
+            s1 = _loadingSave._randS1,
+            s2 = _loadingSave._randS2,
+            s3 = _loadingSave._randS3
+        };
+        state.biomeDepth = (byte)_loadingSave._biomeDepth;
+        state.totalTraveled = _loadingSave._totalTraveled;
+
+        Random.state = state.randomstate;
+    }
+
+    /// <summary>
+    ///     Whether worldgen should be replaced by this system.
+    /// </summary>
+    internal static bool CustomWorldgen()
+    {
+        return _loadingSave != null;
+    }
+
+    /// <summary>
+    ///     If a save is loading, places block/fluid tiles into the world.
+    /// </summary>
+    internal static void PlaceTilesIdempotent()
+    {
+        if (_loadingSave == null || _placedTiles) return;
+
+        try
+        {
+            SavesystemPatch.DeserializeWorldBlocks(_loadingSave._blocks);
+            SavesystemPatch.DeserializeWorldFluids(_loadingSave._fluids);
+        }
+        catch (Exception e)
+        {
+            // This gets swallowed by the coroutine.
+            Plugin.Logger.LogError(e);
+            throw e;
+        }
+
+        _placedTiles = true;
+    }
+
+    /// <summary>
+    ///     If a save is loading, places entities into the world.
+    ///     Returns whether the world was updated.
+    /// </summary>
+    internal static void PlaceEntitiesIdempotent()
+    {
+        if (_loadingSave == null || _placedEntities) return;
+
+        try
+        {
+            DeserializeNetObjects(_loadingSave._objects);
+        }
+        catch (Exception e)
+        {
+            // This gets swallowed by the coroutine.
+            Plugin.Logger.LogError(e);
+            throw e;
+        }
+
+        _placedEntities = true;
+    }
+
+    internal static void PlacePlayer(NetBody plr)
+    {
+        if (_loadingSave == null) return;
+
+        plr.transform.position = new Vector2(_loadingSave._returnX, _loadingSave._returnY);
+    }
+
+    /// <summary>
+    ///     Serializes all server-side net objects to a byte stream.
+    ///     MUST run on the host.
+    /// </summary>
+    private static byte[] SerializeNetObjects()
+    {
+        var writer = new NetDataWriter();
+        var sync = NewCoolerObjectPacketWriteReadSystem.inst;
+
+        var emptyPlayerState = new CoolSyncSubSystemForObjects.Server_PerPlrState
+        {
+            system = sync
+        };
+        var numObjs = 0;
+
+        // Filled with numObjs below.
+        writer.Put(0);
+
+        foreach (var obj in sync.server_objects_list)
+        {
+            if (obj.real_obj == null) continue;
+
+            if (sync.PackObjectForPlr(writer, emptyPlayerState, obj))
+            {
+                numObjs++;
+            }
+        }
+
+        var position = writer.SetPosition(0);
+        writer.Put(numObjs);
+        writer.SetPosition(position);
+
+        return writer.Data;
+    }
+
+    /// <summary>
+    ///     Serializes net objects saved with SerializeNetObjects.
+    ///     This MUST only run on the host, and only before loading
+    ///     the instance.
+    ///     Based on CoolSyncSubSystemForObjects.Client_Receive
+    /// </summary>
+    private static void DeserializeNetObjects(byte[] data)
+    {
+        var reader = new NetDataReader(data);
+        var sync = NewCoolerObjectPacketWriteReadSystem.inst;
+
+        reader.Get(out int numObjs);
+        for (var i = 0; i < numObjs; i++)
+        {
+            reader.Get(out knetid netID);
+            reader.Get(out byte bitsetSize);
+
+            // This uses the mechanism to sync objects from server -> client
+            // to make things easier, however this is running on the server,
+            // so we'll ultimately move it there.
+            var clientObject = new CoolSyncSubSystemForObjects.Client_Object
+            {
+                sys = sync,
+                netId = netID,
+                cur_packet_deltaid = 0,
+                cur_packet = sync.base_packet.CloneViaSerialization(),
+                last_receive_time = Time.realtimeSinceStartupAsDouble
+            };
+
+            reader.Get(out byte data1Size);
+            reader.Get(out ushort data2Size);
+
+            var position = reader.Position;
+            reader.SetPosition(position + data1Size + data2Size);
+
+            var numArray = new byte[bitsetSize];
+            reader.GetBytes(numArray, bitsetSize);
+            clientObject.bitset = new BitArray(numArray);
+
+            reader.SetPosition(position);
+            sync.Client_ReadData1(reader, data1Size, clientObject);
+
+            reader.SetPosition(position + data1Size);
+            sync.Client_ReadData2(reader, data2Size, clientObject);
+
+            reader.SetPosition(position + data1Size + data2Size + bitsetSize);
+
+            // Now that it exists, register it on the server.
+            sync.server_objects[netID] = new CoolSyncSubSystemForObjects.Server_Object
+            {
+                netId = netID,
+                cur_packet = clientObject.cur_packet,
+                real_obj = clientObject.real_obj
+            };
+        }
     }
 }

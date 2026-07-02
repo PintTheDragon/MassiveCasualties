@@ -1,6 +1,7 @@
 using CUCoreLib.Helpers;
 using CUCoreLib.Registries;
 using MassiveCasualties.Behaviors;
+using Steamworks;
 
 namespace MassiveCasualties.Commands;
 
@@ -18,6 +19,15 @@ internal static class JoinRandom
     {
         CUCoreUtils.ConsoleCheckForWorld(ConsoleScript.instance);
 
-        LobbyManager.ConnectFromGame(LobbyManager.GetRandom());
+        var randomWorld = LobbyManager.GetRandom();
+        if (randomWorld != CSteamID.Nil)
+        {
+            LobbyManager.ConnectFromGame(randomWorld);
+            return;
+        }
+
+        SaveManager.LastWorldSave.Load();
+
+        // TODO: Spawn lobby.
     }
 }

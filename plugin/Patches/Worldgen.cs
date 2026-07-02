@@ -8,26 +8,21 @@ using KrokoshaCasualtiesMP;
 using LiteNetLib;
 using MassiveCasualties.Behaviors;
 using MassiveCasualties.Network;
+using Newtonsoft.Json.Linq;
 
 namespace MassiveCasualties.Patches;
 
 /// <summary>
-///     Sends the player's data from an existing session on join.
+///     Sends the player's data from an existing session on join,
+///     or loads it directly if it's the host.
 /// </summary>
-[HarmonyPatch]
+[HarmonyPatch(typeof(WorldgenPatches))]
 internal class WorldPlacePlayerPatch
 {
     // TODO: Saved player state must be cleared before Body_Start_MultiplayerPatch or
     //       else this will cause problems!
 
-    [HarmonyTargetMethod]
-    private static MethodBase TargetMethod()
-    {
-        // WorldgenPatches.Patched_WorldPlacePlayer compiler generated type.
-        var type = AccessTools.Inner(typeof(WorldgenPatches), "<Patched_WorldPlacePlayer>d__49");
-        return AccessTools.Method(type, "MoveNext");
-    }
-
+    [HarmonyPatch(nameof(WorldgenPatches.Patched_WorldPlacePlayer), MethodType.Enumerator)]
     [HarmonyTranspiler]
     private static IEnumerable<CodeInstruction> Transpiler(IEnumerable<CodeInstruction> instructions,
         ILGenerator generator)
@@ -55,6 +50,12 @@ internal class WorldPlacePlayerPatch
 
         matcher.RemoveInstruction();
 
+        // The last statement loads in a string.
+        matcher.MatchForward(false, new CodeMatch(OpCodes.Ldstr, "WorldGeneration.WorldPlacePlayer"))
+            .ThrowIfInvalid("Failed to find the end of WorldPlacePlayer!")
+            .InsertAndAdvance(new CodeInstruction(OpCodes.Call,
+                SymbolExtensions.GetMethodInfo(() => HostWorldPlacePlayer())));
+
         return matcher.Instructions();
     }
 
@@ -66,7 +67,7 @@ internal class WorldPlacePlayerPatch
         {
             try
             {
-                var saveData = SaveSystem.Zip(SaveManager.SerializeSave(SaveManager.LastSessionSave));
+                var saveData = SaveSystem.Zip(SaveManager.SerializePlayerSave(SaveManager.LastSessionSave));
 
                 var writer = Net.CreateWriter((ushort)MessageType.WorldPlacePlayerWithSave);
                 writer.PutBytesWithLength(saveData);
@@ -87,6 +88,20 @@ internal class WorldPlacePlayerPatch
         // Normal WorldPlacePlayer message.
         KrokoshaScavMultiplayer.Client_SendSimpleMessageToServer(10167, WorldGeneration.unchipped, true);
     }
+
+    private static void HostWorldPlacePlayer()
+    {
+        if (!KrokoshaScavMultiplayer.network_system_is_running || !Net.is_host ||
+            SaveManager.LastSessionSave == null || !LobbyManager.IsMcLobby)
+        {
+            return;
+        }
+
+        SaveManager.LoadSaveForPlayer(NetPlayer.LOCAL_PLAYER.playerbody,
+            JObject.FromObject(SaveManager.LastSessionSave));
+
+        WorldSave.PlacePlayer(NetPlayer.LOCAL_PLAYER.playerbody);
+    }
 }
 
 /// <summary>
@@ -100,5 +115,59 @@ internal class BuildingEntityRegistryPatch
     private static bool DistributeInWorld(string id)
     {
         return !id.StartsWith("mc_") || LobbyManager.IsMcLobby;
+    }
+}
+
+/// <summary>
+///     Lets us apply rules (like saved random state) before
+///     worldgen starts on the host, so we can load from a save.
+/// </summary>
+[HarmonyPatch(typeof(LastBeforeGenerationState))]
+internal static class WorldGenSeedPatch
+{
+    [HarmonyPatch(MethodType.Constructor)]
+    [HarmonyPostfix]
+    private static void Constructor(ref LastBeforeGenerationState __instance)
+    {
+        WorldSave.ApplyWorldgenRules(ref __instance);
+    }
+}
+
+/// <summary>
+/// </summary>
+[HarmonyPatch(typeof(WorldGeneration))]
+internal static class WorldGenerationPatch
+{
+    [HarmonyPatch(nameof(WorldGeneration.WorldGenerateTerrain), MethodType.Enumerator)]
+    [HarmonyPrefix]
+    private static bool WorldGenerateTerrain()
+    {
+        if (WorldSave.CustomWorldgen())
+        {
+            WorldSave.PlaceTilesIdempotent();
+            return false;
+        }
+
+        return true;
+    }
+
+    [HarmonyPatch(nameof(WorldGeneration.WorldGenerateWorldBorders), MethodType.Enumerator)]
+    [HarmonyPrefix]
+    private static bool WorldGenerateWorldBorders()
+    {
+        return !WorldSave.CustomWorldgen();
+    }
+
+    [HarmonyPatch(nameof(WorldGeneration.WorldPlaceEntities), MethodType.Enumerator)]
+    [HarmonyPrefix]
+    private static bool WorldPlaceEntities()
+    {
+        if (WorldSave.CustomWorldgen())
+        {
+            WorldSave.PlaceEntitiesIdempotent();
+            return false;
+        }
+
+        return true;
     }
 }
