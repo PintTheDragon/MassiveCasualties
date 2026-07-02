@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Reflection;
 using System.Reflection.Emit;
+using CUCoreLib.Registries;
 using HarmonyLib;
 using KrokoshaCasualtiesMP;
 using LiteNetLib;
@@ -85,5 +86,19 @@ internal class WorldPlacePlayerPatch
 
         // Normal WorldPlacePlayer message.
         KrokoshaScavMultiplayer.Client_SendSimpleMessageToServer(10167, WorldGeneration.unchipped, true);
+    }
+}
+
+/// <summary>
+///     Prevent spawning in MC buildings when in a non-MC lobby.
+/// </summary>
+[HarmonyPatch(typeof(BuildingEntityRegistry))]
+internal class BuildingEntityRegistryPatch
+{
+    [HarmonyPatch(nameof(BuildingEntityRegistry.DistributeInWorld))]
+    [HarmonyPrefix]
+    private static bool DistributeInWorld(string id)
+    {
+        return !id.StartsWith("mc_") || LobbyManager.IsMcLobby;
     }
 }
