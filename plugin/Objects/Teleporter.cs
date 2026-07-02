@@ -11,8 +11,8 @@ internal static class Teleporter
     {
         BuildingEntityRegistry.Register("mc_teleporter", new CustomBuildingEntityDefinition
         {
-            Name = "Dark Tunnel",
-            Description = "It seems to lead somewhere.",
+            Name = "Improvised Lift",
+            Description = "Where does it go?",
             Sprite = AssetLoader.LoadEmbeddedSprite("Images.teleporter.png"),
             Health = 500f,
             Metallic = true,
@@ -21,7 +21,7 @@ internal static class Teleporter
             GenerationStyle = BuildingGenerationStyle.Standard,
             SpawnMinPerChunk = 0.7f,
             SpawnMaxPerChunk = 1.0f,
-            SurfaceOffset = 1.0f,
+            SurfaceOffset = 3.5f,
             Components = [typeof(TeleporterScript)],
             ItemsDropOnDestroy =
             [
