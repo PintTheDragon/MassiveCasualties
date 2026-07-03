@@ -426,11 +426,22 @@ internal class NewLobbyHost : MonoBehaviour
     /// </summary>
     private static void CreateLobbyIfNotExists()
     {
-        if (_cachedLobbyResult != null &&
-            SteamMatchmaking.GetNumLobbyMembers(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby)) > 0)
+        if (_cachedLobbyResult != null)
         {
-            // Lobby already exists.
-            return;
+            if (_cachedLobbyResult.Value.m_ulSteamIDLobby == CSteamID.Nil.m_SteamID ||
+                _cachedLobbyResult.Value.m_ulSteamIDLobby == KSteam.CURRENT_LOBBY.lobby_steamID.m_SteamID ||
+                _cachedLobbyResult.Value.m_ulSteamIDLobby == _fromLobbyId.m_SteamID)
+            {
+                // Lobby is invalid for whatever reason.
+                // No cleanup, since this might point to the current lobby,
+                // which obviously must be maintained.
+                _cachedLobbyResult = null;
+            }
+            else if (SteamMatchmaking.GetNumLobbyMembers(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby)) > 0)
+            {
+                // Lobby already exists.
+                return;
+            }
         }
 
         if (!_canCreateLobby) return;
@@ -511,7 +522,8 @@ internal class NewLobbyHost : MonoBehaviour
     {
         while (true)
         {
-            if (!LobbyManager.IsMcAvailable)
+            // No reason to create lobbies when a background one isn't actually needed.
+            if (!LobbyManager.IsMcAvailable || KSteam.CURRENT_LOBBY.lobby_steamID == CSteamID.Nil)
             {
                 yield return new WaitForSeconds(1f);
                 continue;
@@ -682,7 +694,33 @@ internal class NewLobbyHost : MonoBehaviour
             return;
         }
 
+        // Sometimes steam just gives us bad results if we request a lobby
+        // too quickly, and the fix is a retry.
+        if (pCallback.m_ulSteamIDLobby == CSteamID.Nil.m_SteamID ||
+            pCallback.m_ulSteamIDLobby == KSteam.CURRENT_LOBBY.lobby_steamID.m_SteamID ||
+            pCallback.m_ulSteamIDLobby == _fromLobbyId.m_SteamID)
+        {
+            _canCreateLobby = true;
+            return;
+        }
+
+        if (_cachedLobbyResult != null &&
+            SteamMatchmaking.GetNumLobbyMembers(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby)) > 0)
+        {
+            // A lobby still exists, and which may have been sent to the host,
+            // so we shouldn't override it.
+            Plugin.Logger.LogWarning("Created lobby " + pCallback.m_ulSteamIDLobby +
+                                     ", but another already exists. Deleting!");
+
+            LobbyCreated_t? lobby = pCallback;
+            ClearLobby(ref lobby);
+
+            return;
+        }
+
+        ClearLobby(ref _cachedLobbyResult);
         _cachedLobbyResult = pCallback;
+
         Plugin.Logger.LogInfo("New lobby created: " + pCallback.m_ulSteamIDLobby);
 
         SwitchLobbiesIfWanted();
@@ -695,6 +733,7 @@ internal class NewLobbyHost : MonoBehaviour
     private static void SwitchLobbiesIfWanted()
     {
         if (!_wantToSwitchLobbies || _cachedLobbyResult == null) return;
+        _wantToSwitchLobbies = false;
 
         // Promote the currently cached lobby so that it'll be used
         // when creating the new game.
@@ -712,6 +751,11 @@ internal class NewLobbyHost : MonoBehaviour
 
         Plugin.Logger.LogInfo("I created a new lobby. Requesting the server forward " + _fromLobbyId + " -> " +
                               _nextLobby.Value.m_ulSteamIDLobby);
+
+        if (_fromLobbyId.m_SteamID == _nextLobby.Value.m_ulSteamIDLobby)
+        {
+            Plugin.Logger.LogError("From lobby == to lobby, something is probably broken!");
+        }
 
         // Once the host updates the teleporters with this new ID,
         // we'll see the change, which will trigger SwitchToLobby.

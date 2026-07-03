@@ -121,6 +121,30 @@ internal static class PatchSteamLobby
 
         return !NewLobbyHost.OwnsLobby((CSteamID)pCallback.m_ulSteamIDLobby);
     }
+
+    /// <summary>
+    ///     Same as above.
+    /// </summary>
+    [HarmonyPatch(nameof(KSteam.OnLobbyChatUpdate))]
+    [HarmonyPrefix]
+    private static bool OnLobbyChatUpdate(ref LobbyChatUpdate_t pCallback)
+    {
+        if (pCallback.m_ulSteamIDLobby == CSteamID.Nil.m_SteamID) return true;
+
+        return !NewLobbyHost.OwnsLobby((CSteamID)pCallback.m_ulSteamIDLobby);
+    }
+
+    /// <summary>
+    ///     Same as above.
+    /// </summary>
+    [HarmonyPatch(nameof(KSteam.OnLobbyDataUpdate))]
+    [HarmonyPrefix]
+    private static bool OnLobbyDataUpdate(ref LobbyDataUpdate_t pCallback)
+    {
+        if (pCallback.m_ulSteamIDLobby == CSteamID.Nil.m_SteamID) return true;
+
+        return !NewLobbyHost.OwnsLobby((CSteamID)pCallback.m_ulSteamIDLobby);
+    }
 }
 
 [HarmonyPatch(typeof(TransportSteamworks))]
