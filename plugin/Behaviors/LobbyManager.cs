@@ -254,7 +254,7 @@ internal class LobbyManager : MonoBehaviour
                 "CASUALTIESUNKNOWN_KROKOSHA_MULTIPLAYER_COOP_MOD_HASPASSWORD", "0",
                 ELobbyComparison.k_ELobbyComparisonEqual);
 
-            SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterDefault);
+            SteamMatchmaking.AddRequestLobbyListDistanceFilter(ELobbyDistanceFilter.k_ELobbyDistanceFilterWorldwide);
             SteamMatchmaking.AddRequestLobbyListResultCountFilter(100);
             var hAPICall = SteamMatchmaking.RequestLobbyList();
             _lobbyDataCallback.Set(hAPICall);
