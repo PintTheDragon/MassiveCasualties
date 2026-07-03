@@ -59,6 +59,7 @@ internal static class PatchSteamLobby
         _initRan = true;
 
         LobbyManager.Init();
+        NewLobbyHost.Init();
     }
 
     [HarmonyPatch(nameof(KSteam.Server_UpdateLobbyData))]
@@ -104,5 +105,27 @@ internal static class PatchSteamLobby
             SteamMatchmaking.SetLobbyData(KSteam.lobbyId, "CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION",
                 Plugin.ModVersion);
         }
+    }
+}
+
+[HarmonyPatch(typeof(TransportSteamworks))]
+internal static class TransportSteamworksPatch
+{
+    /// <summary>
+    ///     If we already have a lobby available, uses it
+    ///     instead of creating a new one.
+    /// </summary>
+    [HarmonyPatch(nameof(TransportSteamworks.CreateLobby))]
+    [HarmonyPrefix]
+    private static bool CreateLobby(ref bool __result)
+    {
+        var lobby = NewLobbyHost.TakeLobby();
+        if (lobby == null) return true;
+
+        __result = true;
+
+        KSteam.OnLobbyCreated(lobby.Value, false);
+
+        return false;
     }
 }

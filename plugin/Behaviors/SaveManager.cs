@@ -65,6 +65,8 @@ internal class SaveManager : MonoBehaviour
         // TODO: Support multiple saves (store lobby ID) and dead players.
         LastWorldSave = new WorldSave(NetPlayer.LOCAL_PLAYER.playerbody.position);
         LastWorldSaveLobby = KSteam.CURRENT_LOBBY.lobby_steamID;
+
+        Plugin.Logger.LogInfo("Saved world - " + LastWorldSaveLobby);
     }
 
     /// <summary>

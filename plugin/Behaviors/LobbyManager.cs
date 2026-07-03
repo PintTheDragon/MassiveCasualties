@@ -3,8 +3,12 @@ using System.Collections;
 using System.Collections.Generic;
 using KrokoshaCasualtiesMP;
 using KrokoshaCasualtiesUtils;
+using LiteNetLib;
+using LiteNetLib.Utils;
+using MassiveCasualties.Network;
 using Steamworks;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 
 namespace MassiveCasualties.Behaviors;
 
@@ -82,8 +86,10 @@ internal class LobbyManager : MonoBehaviour
     /// <summary>
     ///     Configures the required multiplayer preset for MC.
     /// </summary>
-    private static void SetMultiplayerSettings()
+    internal static void SetMultiplayerSettings()
     {
+        // TODO: This gets cleared when aborting and creating a new game.
+
         // TODO: Need to enfore mod list, but probably with a custom system.
 
         // TODO: Need game mode select to be limited.
@@ -176,20 +182,36 @@ internal class LobbyManager : MonoBehaviour
         if (!Net.TryGetSteamTransport(out _)) yield break;
         if (lobbyID == KSteam.CURRENT_LOBBY.lobby_steamID || lobbyID == CSteamID.Nil) yield break;
 
-        SaveManager.SaveBeforeSessionChange();
+        try
+        {
+            SaveManager.SaveBeforeSessionChange();
 
-        KrokoshaScavMultiplayer.ShutdownNetwork();
+            KrokoshaScavMultiplayer.ShutdownNetwork();
 
-        // There's severe desync if we don't enter the lobby first.
-        // I'm guessing it's because the client fails to perform the handshake,
-        // since it thinks it's already in game.
-        KrokoshaScavMultiplayer.showMultiplayerMenu = true;
-        PlayerCamera.main.ToMainMenu();
+            // There's severe desync if we don't enter the lobby first.
+            // I'm guessing it's because the client fails to perform the handshake,
+            // since it thinks it's already in game.
+            KrokoshaScavMultiplayer.showMultiplayerMenu = true;
+            PlayerCamera.main.ToMainMenu();
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogError(e.ToString());
+            yield break;
+        }
 
         // TODO: Improve this.
         yield return new WaitForSeconds(1.0f);
 
-        TransportSteamworks.OnWantToJoinLobby(lobbyID.m_SteamID);
+        try
+        {
+            TransportSteamworks.OnWantToJoinLobby(lobbyID.m_SteamID);
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogError(e.ToString());
+            yield break;
+        }
     }
 
     /// <summary>
@@ -314,5 +336,249 @@ internal class LobbyManager : MonoBehaviour
         var numLobbyMembers = SteamMatchmaking.GetNumLobbyMembers(steamIDLobby);
         // TODO: Use lobby members, also unsure what's the difference between that and
         //       metadata CASUALTIESUNKNOWN_KROKOSHA_MULTIPLAYER_COOP_MOD_PLRCOUNT
+    }
+}
+
+/// <summary>
+///     Manages the lifecycle of gracefully creating a new
+///     lobby while already connected to one, informing the current
+///     host of the new lobby, then swapping over to it.
+/// </summary>
+internal class NewLobbyHost : MonoBehaviour
+{
+    internal static NewLobbyHost Singleton;
+
+    protected static CallResult<LobbyCreated_t> _lobbyCreatedCallback;
+
+    private static CSteamID _lastLobbyId = CSteamID.Nil;
+    private static WorldSave _lastSave;
+    private static LobbyCreated_t? _cachedLobbyResult;
+
+    private static bool _startingGame;
+
+    /// <summary>
+    ///     This serves as a debouncer, since if a player spams lobby creation,
+    ///     it could cause the server to tell them to go to a lobby created before
+    ///     the one now in _cachedLobbyResult, which will no longer result, leading to
+    ///     an error.
+    /// </summary>
+    private static bool _canCreateLobby = true;
+
+    private static Coroutine _cleanup;
+
+    private void Awake()
+    {
+        Singleton = this;
+    }
+
+    private void OnDestroy()
+    {
+        Singleton = null;
+    }
+
+    internal static void Init()
+    {
+        _lobbyCreatedCallback = CallResult<LobbyCreated_t>.Create(OnLobbyCreated);
+    }
+
+    /// <summary>
+    ///     Starts a new lobby from a save, optionally forwarding an old lobby ID to
+    ///     the ID of the newly created lobby in every teleporter on the current lobby.
+    /// </summary>
+    /// <param name="oldLobbyID">The original ID of the lobby the save comes from, or Nil if there's no save.</param>
+    /// <param name="oldLobbySave">The save to load the lobby from, or null if there's no save.</param>
+    internal static void HostNewLobby(CSteamID oldLobbyID, WorldSave oldLobbySave)
+    {
+        if (!_canCreateLobby) return;
+        _canCreateLobby = false;
+
+        _lastLobbyId = oldLobbyID;
+        _lastSave = oldLobbySave;
+
+        ClearCachedLobby();
+
+        // It needs to be invisible, otherwise steam will kick us out of
+        // the old lobby.
+        var lobby = SteamMatchmaking.CreateLobby(ELobbyType.k_ELobbyTypeInvisible,
+            KrokoshaScavMultiplayer.PLAYER_COUNT_LIMIT);
+        _lobbyCreatedCallback.Set(lobby);
+
+        if (_cleanup != null) Singleton.StopCoroutine(_cleanup);
+        _cleanup = Singleton.StartCoroutine(LobbyCleanup());
+    }
+
+    /// <summary>
+    ///     If the given lobby ID is one we queued to start,
+    ///     switches the host over to it and returns true.
+    ///     Otherwise, returns false.
+    ///     This should be called after confirming the new lobby ID
+    ///     got round tripped and is now synced to every client.
+    ///     This can be called multiple times, without causing issues.
+    /// </summary>
+    internal static bool SwitchToLobby(CSteamID lobbyID, float delay)
+    {
+        if (!Net.TryGetSteamTransport(out _) || _cachedLobbyResult == null ||
+            _cachedLobbyResult.Value.m_ulSteamIDLobby != lobbyID.m_SteamID)
+        {
+            return false;
+        }
+
+        // This should be idempotent, but still make it clear to the
+        // caller that we are going to be starting the game.
+        if (_startingGame) return true;
+        _startingGame = true;
+
+        Plugin.Logger.LogInfo("Switching to host lobby " + lobbyID.m_SteamID);
+
+        Singleton.StartCoroutine(HostCoroutine(delay));
+
+        return true;
+    }
+
+    /// <summary>
+    ///     If there's currently a cached lobby,
+    ///     extracts it and prevent it from being cleaned up.
+    /// </summary>
+    internal static LobbyCreated_t? TakeLobby()
+    {
+        var lobby = _cachedLobbyResult;
+        _cachedLobbyResult = null;
+
+        return lobby;
+    }
+
+    /// <summary>
+    ///     This puts the system back into a good state if it takes too
+    ///     long for any part of it to be processed.
+    /// </summary>
+    private static IEnumerator LobbyCleanup()
+    {
+        yield return new WaitForSeconds(10.0f);
+
+        ClearCachedLobby();
+
+        _canCreateLobby = true;
+    }
+
+    private static void ClearCachedLobby()
+    {
+        if (_cachedLobbyResult != null && _cachedLobbyResult.Value.m_ulSteamIDLobby != CSteamID.Nil.m_SteamID)
+        {
+            SteamMatchmaking.LeaveLobby(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby));
+            _cachedLobbyResult = null;
+        }
+    }
+
+    private static IEnumerator HostCoroutine(float delay)
+    {
+        if (delay != 0f) yield return new WaitForSeconds(delay);
+
+        try
+        {
+            SaveManager.SaveBeforeSessionChange();
+
+            KrokoshaScavMultiplayer.ShutdownNetwork();
+
+            KrokoshaScavMultiplayer.showMultiplayerMenu = true;
+            PlayerCamera.main.ToMainMenu();
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogError(e.ToString());
+
+            _startingGame = false;
+            yield break;
+        }
+
+        // TODO: Improve this.
+        yield return new WaitForSeconds(1.0f);
+
+        try
+        {
+            var oldLobbyID = _cachedLobbyResult.Value.m_ulSteamIDLobby;
+
+            // This will pull from cachedLobbyResult instead of creating a new lobby.
+            // After this runs, everything is initialized and _cachedLobbyResult is null.
+            LobbyManager.SetMultiplayerSettings();
+            TransportSteamworks.OnWantToHostLobby(Net.NetType.Host, ELobbyType.k_ELobbyTypePublic);
+
+            // It was previously invisible.
+            SteamMatchmaking.SetLobbyType(new CSteamID(oldLobbyID), ELobbyType.k_ELobbyTypePublic);
+
+            if (_lastSave != null)
+            {
+                _lastSave.Load();
+            }
+
+            // Load game.
+            WorldgenPatches._CheckIfCanLoadAWorld();
+            WorldgenPatches.SetTutorialPlayerPrefs(false);
+            if (KrokoshaScavMultiplayer.IsNetworkActiveAndIsServer())
+            {
+                ServerMain.Server_Announce_GAME_START();
+            }
+
+            SceneManager.LoadScene("SampleScene");
+        }
+        catch (Exception e)
+        {
+            Plugin.Logger.LogError(e.ToString());
+
+            _startingGame = false;
+            yield break;
+        }
+
+        _startingGame = false;
+    }
+
+    [ServerReceiver((ushort)MessageType.ForwardLobby)]
+    private static void Server_ForwardLobby(knetid _, ref NetDataReader reader)
+    {
+        reader.Get(out ulong fromID);
+        reader.Get(out ulong toID);
+
+        if (fromID == CSteamID.Nil.m_SteamID || toID == CSteamID.Nil.m_SteamID) return;
+
+        // TODO: Don't switch if the lobby still exists.
+        foreach (var teleporter in TeleporterScript.Teleporters)
+        {
+            if (teleporter.LinkedLobby == fromID) teleporter.LinkedLobby = toID;
+        }
+    }
+
+    private static void OnLobbyCreated(LobbyCreated_t pCallback, bool bIOFailure)
+    {
+        if (bIOFailure)
+        {
+            Plugin.Logger.LogError("bIOFailure during lobby creation!");
+            _canCreateLobby = true;
+            return;
+        }
+
+        if (pCallback.m_eResult != EResult.k_EResultOK)
+        {
+            Plugin.Logger.LogError("OnLobbyCreated didn't succeed!");
+            _canCreateLobby = true;
+            return;
+        }
+
+        _cachedLobbyResult = pCallback;
+
+        if (_lastLobbyId == CSteamID.Nil)
+        {
+            // We're not waiting on a sync, so we can move to the lobby
+            // immediately.
+            SwitchToLobby(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby), 0f);
+            return;
+        }
+
+        // Once the host updates the teleporters with this new ID,
+        // we'll see the change, which will trigger SwitchToLobby.
+        // We can't switch until all the clients are informed, though.
+        var writer = Net.CreateWriter((ushort)MessageType.ForwardLobby);
+        writer.Put(_lastLobbyId.m_SteamID);
+        writer.Put(pCallback.m_ulSteamIDLobby);
+
+        Net.Client_Send(DeliveryMethod.ReliableUnordered, writer);
     }
 }

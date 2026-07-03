@@ -70,6 +70,7 @@ internal class WorldPlacePlayerPatch
                 var saveData = SaveSystem.Zip(SaveManager.SerializePlayerSave(SaveManager.LastSessionSave));
 
                 var writer = Net.CreateWriter((ushort)MessageType.WorldPlacePlayerWithSave);
+                writer.Put(SaveManager.LastWorldSaveLobby.m_SteamID);
                 writer.PutBytesWithLength(saveData);
                 Net.Client_Send(DeliveryMethod.ReliableOrdered, in writer);
 

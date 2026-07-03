@@ -35,6 +35,7 @@ public class Plugin : BaseUnityPlugin
             gameObject.AddComponent<HostWatcher>();
             gameObject.AddComponent<LobbyManager>();
             gameObject.AddComponent<SaveManager>();
+            gameObject.AddComponent<NewLobbyHost>();
 
             ChangeHost.Register();
             JoinRandom.Register();

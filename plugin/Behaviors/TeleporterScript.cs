@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Collections.Generic;
 using KrokoshaCasualtiesMP;
 using LiteNetLib.Utils;
 using MassiveCasualties.Network;
@@ -30,14 +31,25 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
     ///     0 means unlinked, although it could
     ///     also be linked to a lobby that doesn't exist anymore.
     /// </summary>
-    [JsonProperty]
-    internal ulong LinkedLobby { get; private set; }
+    [JsonProperty] internal ulong LinkedLobby;
+
+    internal static List<TeleporterScript> Teleporters { get; } = [];
+
+    private void Awake()
+    {
+        if (!Teleporters.Contains(this)) Teleporters.Add(this);
+    }
 
     private void Start()
     {
         _usable = gameObject.AddComponent<UsableObject>();
         _usable.didLangString = true;
         _usable.toggleString = "Enter";
+    }
+
+    private void OnDestroy()
+    {
+        Teleporters.Remove(this);
     }
 
     public void UpdatePacket(ref ItemOrBuildingCoolDeltaCompressablePacket packet, in SyncInfo syncInfo)
@@ -52,6 +64,10 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
         packet.grabberplant_tipPos.y = data.Short1;
         packet.trader_desiredpos.x = data.Short2;
         packet.trader_desiredpos.y = data.Short3;
+
+        // We might be trying to host a new lobby, rather than connect
+        // to a new one.
+        if (NewLobbyHost.SwitchToLobby(new CSteamID(LinkedLobby), 0.3f)) return;
 
         // Once we start processing sync packets, it's reasonably certain
         // that the rest of the client will be synchronized soon.
@@ -72,8 +88,10 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
 
         LinkedLobby = data.Value;
 
+        if (NewLobbyHost.SwitchToLobby(new CSteamID(LinkedLobby), 0f)) return;
+
         // Try to teleport if we were waiting on the host to do so.
-        Teleport();
+        if (_queuedUse) StartCoroutine(TeleportAfterDelay(0f));
     }
 
     private void OnUse()
@@ -82,7 +100,7 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
         if (LinkedLobby != 0)
         {
             _queuedUse = true;
-            Teleport();
+            StartCoroutine(TeleportAfterDelay(0f));
             return;
         }
 
@@ -101,21 +119,35 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
     ///     Teleports to the lobby in LinkedLobby.
     ///     Only does anything if _queuedUse is true.
     /// </summary>
-    private void Teleport()
-    {
-        if (LinkedLobby == 0 || !_queuedUse) return;
-
-        // TODO: Need to verify the lobby still exists.
-        //       If not, this just kills the run.
-        _queuedUse = false;
-        LobbyManager.ConnectFromGame(new CSteamID(LinkedLobby));
-    }
-
     private IEnumerator TeleportAfterDelay(float delay)
     {
-        yield return new WaitForSeconds(delay);
+        if (!_queuedUse) yield break;
+        _queuedUse = false;
 
-        Teleport();
+        Plugin.Logger.LogInfo("Teleporting to " + LinkedLobby);
+
+        // If the lobby was taken down, but we have a save to it, let's
+        // host a new server.
+        // This needs no delay, as this only starts the hosting process
+        // and doesn't actually cause the host to immediately leave the lobby.
+        if (LinkedLobby == SaveManager.LastWorldSaveLobby.m_SteamID &&
+            !LobbyManager.Lobbies.Exists(lobby => lobby.lobby_steamID == SaveManager.LastWorldSaveLobby))
+        {
+            NewLobbyHost.HostNewLobby(SaveManager.LastWorldSaveLobby, SaveManager.LastWorldSave);
+            yield break;
+        }
+
+        // The delay is just to make sure data gets synced to clients when we're the host.
+        if (delay != 0f) yield return new WaitForSeconds(delay);
+
+        if (LobbyManager.Lobbies.Exists(lobby => lobby.lobby_steamID.m_SteamID == LinkedLobby))
+        {
+            LobbyManager.ConnectFromGame(new CSteamID(LinkedLobby));
+            yield break;
+        }
+
+        // TODO: Properly handle this case.
+        Plugin.Logger.LogError("Lobby didn't exist: " + LinkedLobby);
     }
 
     [ServerReceiver((ushort)MessageType.GetTeleporterLobby)]
@@ -147,7 +179,7 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
             {
                 // If there are no other players, the packet
                 // won't get sent, so we can teleport immediately.
-                tp.Teleport();
+                tp.StartCoroutine(tp.TeleportAfterDelay(0f));
                 return;
             }
 
