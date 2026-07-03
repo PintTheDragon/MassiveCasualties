@@ -106,6 +106,21 @@ internal static class PatchSteamLobby
                 Plugin.ModVersion);
         }
     }
+
+    /// <summary>
+    ///     This handles some of the transport creation process, which
+    ///     for lobbies that we own, is handled internally.
+    ///     Fixes an issue where creating a new lobby creates a new listen socket
+    ///     and brings down the network.
+    /// </summary>
+    [HarmonyPatch(nameof(KSteam.OnLobbyEnter))]
+    [HarmonyPrefix]
+    private static bool OnLobbyEnter(ref LobbyEnter_t pCallback)
+    {
+        if (pCallback.m_ulSteamIDLobby == CSteamID.Nil.m_SteamID) return true;
+
+        return !NewLobbyHost.OwnsLobby((CSteamID)pCallback.m_ulSteamIDLobby);
+    }
 }
 
 [HarmonyPatch(typeof(TransportSteamworks))]
