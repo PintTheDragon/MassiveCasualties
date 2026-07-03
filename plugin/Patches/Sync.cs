@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Reflection.Emit;
 using HarmonyLib;
 using KrokoshaCasualtiesMP;
+using MassiveCasualties.Behaviors;
 using MassiveCasualties.Network;
 
 namespace MassiveCasualties.Patches;
@@ -54,5 +55,27 @@ internal class ItemBuildingSyncPacketPatch
     private static void ReadPacketIntoObject(ref ItemOrBuildingCoolDeltaCompressablePacket __instance, SyncInfo si)
     {
         ObjectSync.ApplyPacket(__instance, si);
+    }
+}
+
+// TODO: Investigate this.
+/// <summary>
+///     This fixes a bug where buildings get destroyed when they come
+///     into view.
+///     It happens when going into the same pair of teleporters three
+///     times.
+///     I'm not sure what causes it, but a really simple fix is to just
+///     not do this on the client.
+/// </summary>
+[HarmonyPatch(typeof(BuildingEntity))]
+internal class BuildingEntitySyncPatch
+{
+    [HarmonyPatch(nameof(BuildingEntity.CheckSeating))]
+    [HarmonyPrefix]
+    private static bool CheckSeating()
+    {
+        if (LobbyManager.IsMcLobby && Net.is_client) return false;
+
+        return true;
     }
 }
