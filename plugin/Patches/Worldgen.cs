@@ -70,7 +70,7 @@ internal class WorldPlacePlayerPatch
                 var saveData = SaveSystem.Zip(SaveManager.SerializePlayerSave(SaveManager.LastSessionSave));
 
                 var writer = Net.CreateWriter((ushort)MessageType.WorldPlacePlayerWithSave);
-                writer.Put(SaveManager.LastWorldSaveLobby.m_SteamID);
+                writer.Put(SaveManager.LastSessionSaveLobby.m_SteamID);
                 writer.PutBytesWithLength(saveData);
                 Net.Client_Send(DeliveryMethod.ReliableOrdered, in writer);
 
@@ -170,5 +170,30 @@ internal static class WorldGenerationPatch
         }
 
         return true;
+    }
+
+    [HarmonyPatch(nameof(WorldGeneration.FinishWorldGeneration), MethodType.Enumerator)]
+    [HarmonyPrefix]
+    private static void FinishWorldGeneration()
+    {
+        WorldSave.FinishLoad();
+    }
+}
+
+/// <summary>
+///     Enforce settings before every game.
+/// </summary>
+[HarmonyPatch(typeof(PreRunScript))]
+internal static class PreRunScriptPatches
+{
+    [HarmonyPatch(nameof(PreRunScript.WaitLoad), MethodType.Enumerator)]
+    [HarmonyPrefix]
+    private static void WaitLoad()
+    {
+        // Not a big deal if this runs multiple times with the coroutine.
+        if (LobbyManager.IsMcLobby)
+        {
+            LobbyManager.SetMultiplayerSettings();
+        }
     }
 }

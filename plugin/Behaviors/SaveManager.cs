@@ -40,6 +40,8 @@ internal class SaveManager : MonoBehaviour
     /// </summary>
     internal static SaveInfo LastSessionSave { get; private set; }
 
+    internal static CSteamID LastSessionSaveLobby { get; private set; }
+
     internal static WorldSave LastWorldSave { get; private set; }
 
     internal static CSteamID LastWorldSaveLobby { get; private set; }
@@ -56,6 +58,7 @@ internal class SaveManager : MonoBehaviour
     private static void SavePlayer()
     {
         InternalSavePatched();
+        LastSessionSaveLobby = KSteam.CURRENT_LOBBY.lobby_steamID;
 
         Plugin.Logger.LogInfo("Saved session - " + LastSessionSave.cId);
     }
@@ -516,8 +519,8 @@ internal class SaveManager : MonoBehaviour
     {
         if (typeName.Contains(" ")) return null;
 
-        var type = typeof(SaveManager).Assembly.GetType(typeName);
-        if (type != null && typeof(Component).IsAssignableFrom(type)) return type;
+        var type = typeof(SaveSystem).Assembly.GetType(typeName);
+        if (type != null && typeof(MonoBehaviour).IsAssignableFrom(type)) return type;
 
         return null;
     }
@@ -749,6 +752,16 @@ internal class WorldSave
         if (_loadingSave == null) return;
 
         plr.transform.position = new Vector2(_loadingSave._returnX, _loadingSave._returnY);
+    }
+
+    /// <summary>
+    ///     Call when a save is finished loading.
+    /// </summary>
+    internal static void FinishLoad()
+    {
+        _loadingSave = null;
+        _placedTiles = false;
+        _placedEntities = false;
     }
 
     /// <summary>

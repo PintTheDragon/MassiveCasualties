@@ -267,7 +267,7 @@ internal class LobbyManager : MonoBehaviour
                 yield return new WaitForSeconds(0.1f);
             }
 
-            yield return new WaitForSeconds(10.0f);
+            yield return new WaitForSeconds(5.0f);
         }
     }
 
@@ -548,10 +548,23 @@ internal class NewLobbyHost : MonoBehaviour
 
         if (fromID == CSteamID.Nil.m_SteamID || toID == CSteamID.Nil.m_SteamID) return;
 
+        Plugin.Logger.LogInfo("Forwarding lobby " + fromID + " -> " + toID);
+
+        var found = false;
+
         // TODO: Don't switch if the lobby still exists.
         foreach (var teleporter in TeleporterScript.Teleporters)
         {
-            if (teleporter.LinkedLobby == fromID) teleporter.LinkedLobby = toID;
+            if (teleporter.LinkedLobby == fromID)
+            {
+                teleporter.LinkedLobby = toID;
+                found = true;
+            }
+        }
+
+        if (!found)
+        {
+            Plugin.Logger.LogWarning("Forward failed because no teleporters for it exist!");
         }
     }
 
@@ -580,6 +593,9 @@ internal class NewLobbyHost : MonoBehaviour
             SwitchToLobby(new CSteamID(_cachedLobbyResult.Value.m_ulSteamIDLobby), 0f);
             return;
         }
+
+        Plugin.Logger.LogInfo("I created a new lobby. Requesting the server forward " + _lastLobbyId + " -> " +
+                              pCallback.m_ulSteamIDLobby);
 
         // Once the host updates the teleporters with this new ID,
         // we'll see the change, which will trigger SwitchToLobby.

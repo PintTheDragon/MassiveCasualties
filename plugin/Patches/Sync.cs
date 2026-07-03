@@ -4,6 +4,7 @@ using HarmonyLib;
 using KrokoshaCasualtiesMP;
 using MassiveCasualties.Behaviors;
 using MassiveCasualties.Network;
+using UnityEngine;
 
 namespace MassiveCasualties.Patches;
 
@@ -77,5 +78,33 @@ internal class BuildingEntitySyncPatch
         if (LobbyManager.IsMcLobby && Net.is_client) return false;
 
         return true;
+    }
+}
+
+/// <summary>
+///     Prevents dropping items when players disconnect,
+///     since they're responsible for managing their own
+///     saves, and this just creates duplicate items.
+/// </summary>
+[HarmonyPatch(typeof(NetPlayer))]
+internal class NetPlayerSyncPatch
+{
+    [HarmonyPatch(nameof(NetPlayer.OnDestroy))]
+    [HarmonyPrefix]
+    private static void OnDestroy(NetPlayer __instance)
+    {
+        if (!LobbyManager.IsMcLobby) return;
+
+        var ply = __instance.playerbody;
+        if (ply == null) return;
+
+        for (var slot = 0; slot < ply.body.slots.Length; slot++)
+        {
+            var item = ply.body.GetItem(slot);
+            if (item != null)
+            {
+                Object.DestroyImmediate(item.gameObject);
+            }
+        }
     }
 }
