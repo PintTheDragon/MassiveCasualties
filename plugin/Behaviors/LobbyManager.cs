@@ -473,14 +473,21 @@ internal class NewLobbyHost : MonoBehaviour
     {
         if (delay != 0f) yield return new WaitForSeconds(delay);
 
+        ulong newLobbyID;
+
         try
         {
+            newLobbyID = _cachedLobbyResult.Value.m_ulSteamIDLobby;
+
             SaveManager.SaveBeforeSessionChange();
 
             KrokoshaScavMultiplayer.ShutdownNetwork();
 
             KrokoshaScavMultiplayer.showMultiplayerMenu = true;
             PlayerCamera.main.ToMainMenu();
+
+            // It was previously invisible.
+            SteamMatchmaking.SetLobbyType(new CSteamID(newLobbyID), ELobbyType.k_ELobbyTypePublic);
         }
         catch (Exception e)
         {
@@ -495,15 +502,17 @@ internal class NewLobbyHost : MonoBehaviour
 
         try
         {
-            var oldLobbyID = _cachedLobbyResult.Value.m_ulSteamIDLobby;
-
             // This will pull from cachedLobbyResult instead of creating a new lobby.
             // After this runs, everything is initialized and _cachedLobbyResult is null.
             LobbyManager.SetMultiplayerSettings();
             TransportSteamworks.OnWantToHostLobby(Net.NetType.Host, ELobbyType.k_ELobbyTypePublic);
 
-            // It was previously invisible.
-            SteamMatchmaking.SetLobbyType(new CSteamID(oldLobbyID), ELobbyType.k_ELobbyTypePublic);
+            KSteam.CURRENT_LOBBY.locked = false;
+            KSteam.UpdateLobbyInfo((CSteamID)newLobbyID, ref KSteam.CURRENT_LOBBY);
+            // OnLobbyEnter normally creates this socket, but it triggered a while
+            // ago when the lobby was first created, and has since been closed.
+            // So, we need to recreate it.
+            ((TransportSteamworks)Net.TRANSPORT).CreateServerSocket();
 
             if (_lastSave != null)
             {
