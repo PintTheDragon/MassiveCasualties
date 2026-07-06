@@ -135,6 +135,7 @@ internal static class WorldGenSeedPatch
 }
 
 /// <summary>
+///     Handles loading in a world save.
 /// </summary>
 [HarmonyPatch(typeof(WorldGeneration))]
 internal static class WorldGenerationPatch

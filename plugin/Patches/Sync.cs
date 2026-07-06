@@ -41,6 +41,10 @@ internal class NetObjectRegistryPatch
     }
 }
 
+/// <summary>
+///     Hooks into the existing sync system to make it work for custom
+///     buildings/items.
+/// </summary>
 [HarmonyPatch(typeof(ItemOrBuildingCoolDeltaCompressablePacket))]
 internal class ItemBuildingSyncPacketPatch
 {

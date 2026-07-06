@@ -517,9 +517,16 @@ internal class SaveManager : MonoBehaviour
     /// </summary>
     private static Type SafeGetComponentType(string typeName)
     {
-        if (typeName.Contains(" ")) return null;
+        // We don't care about the fully qualified type info, since this must
+        // come from Assembly-CSharp and it's better to pass less to GetType
+        // for security.
+        var parts = typeName.Split(',');
+        if (parts.Length == 0) return null;
 
-        var type = typeof(SaveSystem).Assembly.GetType(typeName);
+        var cleanName = parts[0];
+        if (cleanName.Contains(" ")) return null;
+
+        var type = typeof(SaveSystem).Assembly.GetType(cleanName);
         if (type != null && typeof(MonoBehaviour).IsAssignableFrom(type)) return type;
 
         return null;
