@@ -793,10 +793,30 @@ internal class WorldSave
         {
             if (obj.real_obj == null) continue;
 
-            if (sync.PackObjectForPlr(writer, emptyPlayerState, obj))
+            // Used to allow the reader to skip ahead if an error occurs.
+            var skipPosPos = writer._position;
+            writer.Put(0);
+
+            try
             {
-                numObjs++;
+                if (sync.PackObjectForPlr(writer, emptyPlayerState, obj))
+                {
+                    numObjs++;
+                }
             }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError("Error serializing net object: " + e);
+
+                // No need to abort, just backtrack to before we started writing.
+                writer.SetPosition(skipPosPos);
+                continue;
+            }
+
+            var pos = writer.SetPosition(skipPosPos);
+            writer.Put(pos);
+
+            writer.SetPosition(pos);
         }
 
         var position = writer.SetPosition(0);
@@ -820,46 +840,59 @@ internal class WorldSave
         reader.Get(out int numObjs);
         for (var i = 0; i < numObjs; i++)
         {
+            reader.Get(out int skipPos);
             reader.Get(out knetid netID);
             reader.Get(out byte bitsetSize);
 
-            // This uses the mechanism to sync objects from server -> client
-            // to make things easier, however this is running on the server,
-            // so we'll ultimately move it there.
-            var clientObject = new CoolSyncSubSystemForObjects.Client_Object
+            try
             {
-                sys = sync,
-                netId = netID,
-                cur_packet_deltaid = 0,
-                cur_packet = sync.base_packet.CloneViaSerialization(),
-                last_receive_time = Time.realtimeSinceStartupAsDouble
-            };
+                // This uses the mechanism to sync objects from server -> client
+                // to make things easier, however this is running on the server,
+                // so we'll ultimately move it there.
+                var clientObject = new CoolSyncSubSystemForObjects.Client_Object
+                {
+                    sys = sync,
+                    netId = netID,
+                    cur_packet_deltaid = 0,
+                    cur_packet = sync.base_packet.CloneViaSerialization(),
+                    last_receive_time = Time.realtimeSinceStartupAsDouble
+                };
 
-            reader.Get(out byte data1Size);
-            reader.Get(out ushort data2Size);
+                reader.Get(out byte data1Size);
+                reader.Get(out ushort data2Size);
 
-            var position = reader.Position;
-            reader.SetPosition(position + data1Size + data2Size);
+                var position = reader.Position;
+                reader.SetPosition(position + data1Size + data2Size);
 
-            var numArray = new byte[bitsetSize];
-            reader.GetBytes(numArray, bitsetSize);
-            clientObject.bitset = new BitArray(numArray);
+                var numArray = new byte[bitsetSize];
+                reader.GetBytes(numArray, bitsetSize);
+                clientObject.bitset = new BitArray(numArray);
 
-            reader.SetPosition(position);
-            sync.Client_ReadData1(reader, data1Size, clientObject);
+                reader.SetPosition(position);
+                sync.Client_ReadData1(reader, data1Size, clientObject);
 
-            reader.SetPosition(position + data1Size);
-            sync.Client_ReadData2(reader, data2Size, clientObject);
+                reader.SetPosition(position + data1Size);
+                sync.Client_ReadData2(reader, data2Size, clientObject);
 
-            reader.SetPosition(position + data1Size + data2Size + bitsetSize);
+                reader.SetPosition(position + data1Size + data2Size + bitsetSize);
 
-            // Now that it exists, register it on the server.
-            sync.server_objects[netID] = new CoolSyncSubSystemForObjects.Server_Object
+                // Now that it exists, register it on the server.
+                sync.server_objects[netID] = new CoolSyncSubSystemForObjects.Server_Object
+                {
+                    netId = netID,
+                    cur_packet = clientObject.cur_packet,
+                    real_obj = clientObject.real_obj
+                };
+            }
+            catch (Exception e)
             {
-                netId = netID,
-                cur_packet = clientObject.cur_packet,
-                real_obj = clientObject.real_obj
-            };
+                Plugin.Logger.LogError("Error deserializing net objects: " + e);
+
+                // Skip the object and keep moving.
+                // This isn't user-input, but even if it was, there's bounds checking
+                // to make this safe.
+                reader.SetPosition(skipPos);
+            }
         }
     }
 }

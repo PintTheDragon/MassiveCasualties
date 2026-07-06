@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using KrokoshaCasualtiesMP;
 using KrokoshaCasualtiesUtils;
 using LiteNetLib.Utils;
@@ -26,50 +27,88 @@ internal class Worldgen
             return;
         }
 
-        var fromLobby = CSteamID.Nil.m_SteamID;
+        reader.Get(out ulong fromLobby);
+        JObject parsedData = null;
 
         try
         {
-            reader.Get(out fromLobby);
             var saveData = reader.GetBytesWithLength();
-            var parsedData = JObject.Parse(SaveSystem.Unzip(saveData));
-
-            if (!SaveManager.LoadSaveForPlayer(plr.playerbody, parsedData))
-            {
-                // TODO: Inform the client so they can retry / otherwise not lose all their stuff.
-            }
+            parsedData = JObject.Parse(SaveSystem.Unzip(saveData));
         }
         catch (Exception e)
         {
             Plugin.Logger.LogError($"Error parsing JSON for WorldPlacePlayerWithSave: {e}");
         }
 
-        // If they came from a lobby, we should spawn them at a teleporter.
-        if (fromLobby != CSteamID.Nil.m_SteamID)
-        {
-            SpawnAtLobbyTeleporter(plr.playerbody, fromLobby);
-        }
-
         plr.ResetEntropy();
 
-        if (plr.body != null) plr.unchipped = plr.playerbody.unchipped;
-
         plr.server_plrstate.did_give_spawn_location = true;
-        plr.StartCoroutine(ServerMain.HeyPlayerJustJoinedGiveHimASpawnLocationOkay(clientId));
+        plr.StartCoroutine(PlacePlayer(clientId, fromLobby, parsedData));
         WorldChunkSync.singleton.timer_TilemapSync += 0.05f;
         WorldChunkSync.singleton.timer_TilemapFluidSync += 0.05f;
     }
 
+    /// <summary>
+    ///     Handles placing the player (with save / other details) after they
+    ///     spawn in, since the WorldPlacePlayer message might come too early.
+    /// </summary>
+    private static IEnumerator PlacePlayer(knetid clientId, ulong fromLobby, JObject parsedData)
+    {
+        // Taken from HeyPlayerJustJoinedGiveHimASpawnLocationOkay,
+        // to make sure pb is valid.
+        NetPlayer plr;
+        NetBody pb;
+        while (!NetPlayer.TryGetNetPlayerAndNetBodyFromClientId(clientId, out plr, out pb) ||
+               !Util.IsWorldGenerated() || !Body_PlaceBody_MultiplayerPatch.has_spawn_location)
+        {
+            if (plr != null) plr.ResetEntropy();
+
+            yield return null;
+        }
+
+        if (plr != null)
+        {
+            try
+            {
+                if (!SaveManager.LoadSaveForPlayer(plr.playerbody, parsedData))
+                {
+                    // TODO: Inform the client so they can retry / otherwise not lose all their stuff.
+                }
+
+                plr.unchipped = pb.unchipped;
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError($"Error applying save for WorldPlacePlayerWithSave: {e}");
+            }
+
+            // If they came from a lobby, we should spawn them at a teleporter.
+            try
+            {
+                if (fromLobby != CSteamID.Nil.m_SteamID)
+                {
+                    SpawnAtLobbyTeleporter(pb, fromLobby);
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Logger.LogError($"Error spawning player at teleporter: {e}");
+            }
+        }
+
+        yield return ServerMain.HeyPlayerJustJoinedGiveHimASpawnLocationOkay(clientId);
+    }
+
     private static void SpawnAtLobbyTeleporter(NetBody body, ulong fromLobby)
     {
-        // Prevent the default spawning logic from taking over.
-        body.player.server_plrstate.did_give_spawn_location_from_a_save = true;
-
         foreach (var tp in TeleporterScript.Teleporters)
         {
             if (tp.LinkedLobby == fromLobby)
             {
                 body.SetBodyPosition(tp.transform.position);
+                // Prevent the default spawning logic from taking over.
+                body.player.server_plrstate.did_give_spawn_location_from_a_save = true;
+
                 return;
             }
         }
@@ -104,12 +143,12 @@ internal class Worldgen
         {
             closest.LinkedLobby = fromLobby;
             body.SetBodyPosition(closest.transform.position);
+            // Prevent the default spawning logic from taking over.
+            body.player.server_plrstate.did_give_spawn_location_from_a_save = true;
 
             return;
         }
 
         Plugin.Logger.LogError("Failed to find spawn teleporter!");
-        // Fallback to the default spawning logic.
-        body.player.server_plrstate.did_give_spawn_location_from_a_save = false;
     }
 }
