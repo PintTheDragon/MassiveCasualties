@@ -63,7 +63,9 @@ internal class WorldPlacePlayerPatch
     {
         // TODO: Does this need custom handling for moving between layers?
 
-        if (SaveManager.LastSessionSave != null && LobbyManager.IsMcLobby)
+        // We shouldn't send this during a regen, since the server keeps track of our items.
+        // Otherwise, this would override the items to an older version on layer change.
+        if (SaveManager.LastSessionSave != null && LobbyManager.IsMcLobby && !RegenerateWorldPatch.InRegen)
         {
             try
             {
@@ -93,7 +95,7 @@ internal class WorldPlacePlayerPatch
     private static void HostWorldPlacePlayer()
     {
         if (!KrokoshaScavMultiplayer.network_system_is_running || !Net.is_host ||
-            SaveManager.LastSessionSave == null || !LobbyManager.IsMcLobby)
+            SaveManager.LastSessionSave == null || !LobbyManager.IsMcLobby || RegenerateWorldPatch.InRegen)
         {
             return;
         }
@@ -196,5 +198,51 @@ internal static class PreRunScriptPatches
         {
             LobbyManager.SetMultiplayerSettings();
         }
+    }
+}
+
+/// <summary>
+///     Handles special behavior to distinguish regenerating from joining
+///     a new lobby.
+/// </summary>
+[HarmonyPatch]
+internal static class RegenerateWorldPatch
+{
+    /// <summary>
+    ///     Whether this session was created from regen (as opposed to a new lobby join).
+    /// </summary>
+    internal static bool InRegen { get; private set; }
+
+    [HarmonyPatch(typeof(ClientMain), nameof(ClientMain.ClientReceiver__Announce_RegenerateWorld))]
+    [HarmonyPrefix]
+    private static void ReceiveRegenPatch()
+    {
+        if (!KrokoshaScavMultiplayer.is_client || WorldGeneration.world == null) return;
+
+        InRegen = true;
+    }
+
+    [HarmonyPatch(typeof(WorldGeneration), nameof(WorldGeneration.ContinueRun))]
+    [HarmonyPrefix]
+    private static void ContinueRunPatch()
+    {
+        if (KrokoshaScavMultiplayer.is_client) return;
+
+        // TODO: Should player state be saved here?
+        InRegen = true;
+    }
+
+    [HarmonyPatch(typeof(TransportSteamworks), nameof(TransportSteamworks.CreateServerSocket))]
+    [HarmonyPrefix]
+    private static void OnServerCreate()
+    {
+        InRegen = false;
+    }
+
+    [HarmonyPatch(typeof(TransportSteamworks), nameof(TransportSteamworks.CreateClientSocket))]
+    [HarmonyPrefix]
+    private static void OnClientCreate()
+    {
+        InRegen = false;
     }
 }
