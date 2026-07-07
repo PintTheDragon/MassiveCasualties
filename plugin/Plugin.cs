@@ -15,7 +15,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string ModGUID = "pintthedragon.massivecasualties";
     public const string ModName = "Massive Casualties";
-    public const string ModVersion = "0.0.1";
+    public const string ModVersion = "0.0.2";
 
     internal new static ManualLogSource Logger;
 
