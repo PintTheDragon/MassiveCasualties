@@ -130,7 +130,7 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
         // host a new server.
         // This needs no delay, as this only starts the hosting process
         // and doesn't actually cause the host to immediately leave the lobby.
-        if (LinkedLobby == SaveManager.LastWorldSaveLobby.m_SteamID &&
+        if (LinkedLobby != 0 && LinkedLobby == SaveManager.LastWorldSaveLobby.m_SteamID &&
             !LobbyManager.Lobbies.Exists(lobby => lobby.lobby_steamID == SaveManager.LastWorldSaveLobby))
         {
             NewLobbyHost.HostNewLobby(SaveManager.LastWorldSaveLobby, SaveManager.LastWorldSave);
@@ -167,6 +167,8 @@ internal class TeleporterScript : MonoBehaviour, ISyncItemOrBuilding
         {
             tp.LinkedLobby = LobbyManager.GetRandom().m_SteamID;
         }
+
+        // TODO: If LinkedLobby is 0, we'll still try to teleport to it. Show a message?
 
         // Sync ASAP to reduce delay and let the host leave
         // soon if they're the one who requested it.

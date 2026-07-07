@@ -597,7 +597,9 @@ internal class TypeWhitelist : DefaultContractResolver
     {
         typeof(int), typeof(float), typeof(double), typeof(string), typeof(bool),
         typeof(Vector3), typeof(Quaternion),
-        typeof(Skills), typeof(LiquidStack), typeof(SavedItem)
+        typeof(Skills), typeof(LiquidStack), typeof(SavedItem),
+        typeof(GunScript.AmmoType), typeof(GunScript.RoundInChamber), typeof(GunScript.FiringMode),
+        typeof(GunScript.FeedType)
     };
 
     internal static bool IsTypeAllowed(Type type)
