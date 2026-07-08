@@ -9,7 +9,7 @@ using UnityEngine;
 namespace MassiveCasualties.Patches;
 
 [HarmonyPatch(typeof(UIMainMenu))]
-public class MainMenuPatch
+internal class MainMenuPatch
 {
     private static readonly MethodInfo GetIsMcEnabled = typeof(LobbyManager).GetMethod(
         "get_" + nameof(LobbyManager.IsMcEnabled),
@@ -153,19 +153,42 @@ public class MainMenuPatch
         var oldColor = GUI.color;
         var oldLayout = GUI.skin.label.alignment;
 
-        if (!KSteam.Loaded)
+        if (VersionChecker.IsOutdated)
+        {
+            var linkStyle = new GUIStyle(GUI.skin.label)
+            {
+                alignment = TextAnchor.MiddleCenter,
+                normal =
+                {
+                    textColor = Color.red
+                },
+                hover =
+                {
+                    textColor = Color.red
+                },
+                wordWrap = true
+            };
+
+            // This behaves like a button but supports word wrap.
+            if (GUILayout.SelectionGrid(-1, ["Massive Casualties is out-of-date, click to download the latest version"],
+                    1, linkStyle, GUILayout.MinHeight(50f * UIMainMenu.GetMenuUIScale())) == 0)
+            {
+                Application.OpenURL(VersionChecker.DOWNLOAD_URL);
+            }
+        }
+        else if (!KSteam.Loaded)
         {
             GUI.skin.label.alignment = TextAnchor.MiddleCenter;
             GUI.color = Color.red;
 
-            GUILayout.Label("Steam is not available, so MassiveCasualties is disabled");
+            GUILayout.Label("Steam is not available, so Massive Casualties is disabled");
         }
         else if (LobbyManager.IsMcEnabled)
         {
             GUI.skin.label.alignment = TextAnchor.MiddleCenter;
             GUI.color = Color.white;
 
-            GUILayout.Label("Steam is required for MassiveCasualties");
+            GUILayout.Label("Steam is required for Massive Casualties");
         }
 
         GUI.color = oldColor;

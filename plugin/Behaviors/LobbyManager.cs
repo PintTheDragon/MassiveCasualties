@@ -242,8 +242,6 @@ internal class LobbyManager : MonoBehaviour
 
             var lastIdx = _lastLobbyIdx;
 
-            SteamMatchmaking.AddRequestLobbyListStringFilter("CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION",
-                Plugin.ModVersion, ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter("CASUALTIESUNKNOWN_MASSIVECASUALTIES_NETVERSION",
                 Plugin.NetVersion, ELobbyComparison.k_ELobbyComparisonEqual);
             SteamMatchmaking.AddRequestLobbyListStringFilter(
