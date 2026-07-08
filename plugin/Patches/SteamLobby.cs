@@ -104,6 +104,8 @@ internal static class PatchSteamLobby
         {
             SteamMatchmaking.SetLobbyData(KSteam.lobbyId, "CASUALTIESUNKNOWN_MASSIVECASUALTIES_VERSION",
                 Plugin.ModVersion);
+            SteamMatchmaking.SetLobbyData(KSteam.lobbyId, "CASUALTIESUNKNOWN_MASSIVECASUALTIES_NETVERSION",
+                Plugin.NetVersion);
         }
     }
 

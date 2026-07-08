@@ -17,6 +17,11 @@ public class Plugin : BaseUnityPlugin
     public const string ModName = "Massive Casualties";
     public const string ModVersion = "0.0.2";
 
+    /// <summary>
+    ///     Patch versions don't affect network compatibility, everything else does.
+    /// </summary>
+    public static readonly string NetVersion = ModVersion.Substring(0, ModVersion.LastIndexOf('.'));
+
     internal new static ManualLogSource Logger;
 
     internal static readonly bool DEV = false;
