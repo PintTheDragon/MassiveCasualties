@@ -15,7 +15,7 @@ public class Plugin : BaseUnityPlugin
 {
     public const string ModGUID = "pintthedragon.massivecasualties";
     public const string ModName = "Massive Casualties";
-    public const string ModVersion = "0.0.2";
+    public const string ModVersion = "0.0.3";
 
     /// <summary>
     ///     Patch versions don't affect network compatibility, everything else does.
