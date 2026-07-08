@@ -39,15 +39,29 @@ internal class EntitySync : MonoBehaviour
     {
         while (true)
         {
-            if (DisallowSync)
+            while (DisallowSync)
             {
                 yield return new WaitForSeconds(1f);
-                continue;
             }
 
             yield return SlowSync();
 
-            yield return new WaitForSeconds(10f);
+            // This might mean we're changing servers, in which case
+            // we want to do another sync as soon as possible.
+            if (DisallowSync) continue;
+
+            // Delay between syncs.
+            // If another player joins, we should immediately resync,
+            // since that player will need to have all the entities to be
+            // able to be the new host.
+            var lastPlayers = Enumerable.ToHashSet(NetPlayer.ClientIdToPlayerDict.Keys);
+            for (var i = 0; i < 10; i++)
+            {
+                var newPlayers = Enumerable.ToHashSet(NetPlayer.ClientIdToPlayerDict.Keys);
+                if (DisallowSync || !lastPlayers.SetEquals(newPlayers)) break;
+
+                yield return new WaitForSeconds(1f);
+            }
         }
     }
 
