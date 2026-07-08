@@ -36,6 +36,7 @@ public class Plugin : BaseUnityPlugin
             gameObject.AddComponent<LobbyManager>();
             gameObject.AddComponent<SaveManager>();
             gameObject.AddComponent<NewLobbyHost>();
+            gameObject.AddComponent<EntitySync>();
 
             ChangeHost.Register();
             JoinRandom.Register();
