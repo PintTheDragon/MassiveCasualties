@@ -779,6 +779,11 @@ internal class WorldSave
     /// </summary>
     private static byte[] SerializeNetObjects()
     {
+        var playerItems = Enumerable.ToHashSet(
+            NetBody.all_instances.Where(body => body.body != null).SelectMany(body => body.body.GetAllItemsThorough())
+                .Select(item => item.gameObject)
+        );
+
         var writer = new NetDataWriter();
         var sync = NewCoolerObjectPacketWriteReadSystem.inst;
 
@@ -794,6 +799,10 @@ internal class WorldSave
         foreach (var obj in sync.server_objects_list)
         {
             if (obj.real_obj == null) continue;
+
+            // We need to ignore player-owned items, as they're managed by the
+            // players themselves, and spawning will lead to duplicates.
+            if (obj.real_obj is SyncInfo info && playerItems.Contains(info.go)) continue;
 
             // Used to allow the reader to skip ahead if an error occurs.
             var skipPosPos = writer._position;
@@ -896,5 +905,7 @@ internal class WorldSave
                 reader.SetPosition(skipPos);
             }
         }
+
+        Plugin.Logger.LogInfo($"Loaded {numObjs} objects from save!");
     }
 }
