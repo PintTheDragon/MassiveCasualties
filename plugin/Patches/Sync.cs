@@ -97,14 +97,16 @@ internal class NetPlayerSyncPatch
     [HarmonyPrefix]
     private static void OnDestroy(NetPlayer __instance)
     {
+        // This originally calls NetPlayer.DestroyCharacterIfNoLocal to drop
+        // all the player's items, so we need to destroy them first. 
+
         if (!LobbyManager.IsMcLobby) return;
 
         var ply = __instance.playerbody;
         if (ply == null) return;
 
-        for (var slot = 0; slot < ply.body.slots.Length; slot++)
+        foreach (var item in ply.body.GetAllItemsThorough())
         {
-            var item = ply.body.GetItem(slot);
             if (item != null)
             {
                 Object.DestroyImmediate(item.gameObject);
